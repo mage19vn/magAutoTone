@@ -3,13 +3,13 @@ import subprocess
 import sys
 
 def build():
-    print("Bắt đầu tiến trình Build magAutoTone ra file .exe...")
+    print("Starting magAutoTone build process...")
     
     # Đảm bảo PyInstaller đã được cài đặt
     try:
         import PyInstaller
     except ImportError:
-        print("Chưa cài đặt PyInstaller. Đang cài đặt...")
+        print("PyInstaller not found. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
     # Đường dẫn đến file chính
@@ -33,17 +33,17 @@ def build():
         main_script
     ]
     
-    print(f"Đang chạy lệnh: {' '.join(command)}")
-    print("Vui lòng kiên nhẫn chờ đợi, quá trình build các thư viện AI nặng như Torch và Demucs có thể mất vài phút...")
+    print(f"Running command: {' '.join(command)}")
+    print("Please wait, packaging AI libraries (Torch/Demucs) can take several minutes...")
     
     # Chạy lệnh build
     try:
         subprocess.check_call(command)
         print("\n" + "="*50)
-        print("BUILD THÀNH CÔNG! File magAutoTone.exe nằm trong thư mục 'dist'")
+        print("BUILD SUCCESSFUL! Check the 'dist' folder for magAutoTone.exe")
         print("="*50)
     except subprocess.CalledProcessError as e:
-        print(f"\nLỗi trong quá trình build: {e}")
+        print(f"\nBuild failed: {e}")
 
 if __name__ == "__main__":
     build()
