@@ -204,14 +204,37 @@ class AutoToneApp(Tk):
         scroll_frame.pack(fill="both", expand=True, padx=25, pady=(0, 20))
         
         def create_card(parent, title, content, icon):
-            card = ctk.CTkFrame(parent, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
-            card.pack(fill="x", pady=(0, 15))
+            card = ctk.CTkFrame(parent, corner_radius=15, fg_color="#2b2b2b", border_width=2, border_color="#3b3b3b")
+            card.pack(fill="x", pady=(0, 20))
             
-            lbl_title = ctk.CTkLabel(card, text=f"{icon} {title}", font=ctk.CTkFont(size=16, weight="bold"), text_color="#e0e0e0")
-            lbl_title.pack(anchor="w", padx=20, pady=(15, 5))
+            title_frame = ctk.CTkFrame(card, fg_color="transparent")
+            title_frame.pack(anchor="w", fill="x", padx=20, pady=(20, 10))
+            
+            icon_lbl = ctk.CTkLabel(title_frame, text=icon, width=44, height=44, corner_radius=22, 
+                                     fg_color="#1f1f1f", text_color=self.current_theme_color, font=ctk.CTkFont(size=22))
+            icon_lbl.pack(side="left")
+            
+            lbl_title = ctk.CTkLabel(title_frame, text=title, font=ctk.CTkFont(size=17, weight="bold"), text_color="#ffffff")
+            lbl_title.pack(side="left", padx=(15, 0))
+            
+            divider = ctk.CTkFrame(card, height=1, fg_color="#3d3d3d")
+            divider.pack(fill="x", padx=20, pady=(0, 15))
             
             lbl_content = ctk.CTkLabel(card, text=content, font=ctk.CTkFont(size=14), text_color="#cccccc", justify="left", wraplength=480)
-            lbl_content.pack(anchor="w", padx=20, pady=(0, 15))
+            lbl_content.pack(anchor="w", padx=20, pady=(0, 20))
+            
+            # Hover effect
+            def on_enter(e): card.configure(border_color=self.current_theme_color)
+            def on_leave(e): card.configure(border_color="#3b3b3b")
+            
+            card.bind("<Enter>", on_enter)
+            card.bind("<Leave>", on_leave)
+            title_frame.bind("<Enter>", on_enter)
+            title_frame.bind("<Leave>", on_leave)
+            icon_lbl.bind("<Enter>", on_enter)
+            lbl_title.bind("<Enter>", on_enter)
+            divider.bind("<Enter>", on_enter)
+            lbl_content.bind("<Enter>", on_enter)
         
         create_card(scroll_frame, "MỤC ĐÍCH", 
                     "Phần mềm giúp bạn tự động nhận diện Tone (Scale) và Nhịp (BPM) của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).", 
