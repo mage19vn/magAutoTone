@@ -1,4 +1,4 @@
-# MagAutoTone - Dynamic UI
+# magAutoTone
 
 **MagAutoTone** là ứng dụng hỗ trợ phân tích âm nhạc chuyên nghiệp. Phần mềm cho phép bạn dễ dàng kéo thả file âm thanh/video để phân tích nhịp độ (BPM), tông nhạc (Key) và tách riêng biệt các thành phần (Vocals, Bass, Drums, Other) dựa trên công nghệ AI tiên tiến.
 

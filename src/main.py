@@ -31,7 +31,7 @@ class AutoToneApp(Tk):
     def __init__(self):
         super().__init__()
 
-        self.title(f"MagAutoTone {CURRENT_VERSION} - Dynamic UI")
+        self.title(f"magAutoTone {CURRENT_VERSION}")
         self.geometry("600x700")
         self.minsize(600, 700)
 
