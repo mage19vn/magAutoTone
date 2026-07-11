@@ -278,7 +278,7 @@ class AutoToneApp(Tk):
         lbl_version = ctk.CTkLabel(card5, text=f"Phiên bản hiện tại: {CURRENT_VERSION}", text_color="gray")
         lbl_version.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 15))
         
-        btn_update = ctk.CTkButton(card5, text="Kiểm tra", width=80, height=32, corner_radius=16,
+        btn_update = ctk.CTkButton(card5, text="Kiểm tra bản cập nhật", width=140, height=32, corner_radius=16,
                                    fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333",
                                    command=self.manual_check_update)
         btn_update.grid(row=1, column=1, sticky="e", padx=20, pady=(0, 15))
