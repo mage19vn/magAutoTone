@@ -15,7 +15,7 @@ def check_for_updates():
             data = json.loads(response.read().decode())
             latest_version = data.get("tag_name")
             
-            if latest_version and latest_version != CURRENT_VERSION:
+            if latest_version and latest_version.lstrip('v') != CURRENT_VERSION.lstrip('v'):
                 assets = data.get("assets", [])
                 if assets:
                     download_url = assets[0]["browser_download_url"]
