@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import zipfile
 
 def build():
     print("Starting magAutoTone build process...")
@@ -39,8 +40,17 @@ def build():
     # Chạy lệnh build
     try:
         subprocess.check_call(command)
+        
+        # Nén thành file zip
+        print("\nĐang nén thành file ZIP...")
+        zip_path = os.path.join("dist", "magAutoTone.zip")
+        exe_path = os.path.join("dist", "magAutoTone.exe")
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(exe_path, arcname="magAutoTone.exe")
+            
         print("\n" + "="*50)
-        print("BUILD SUCCESSFUL! Check the 'dist' folder for magAutoTone.exe")
+        print("BUILD & NÉN THÀNH CÔNG! Check the 'dist' folder for magAutoTone.zip")
         print("="*50)
     except subprocess.CalledProcessError as e:
         print(f"\nBuild failed: {e}")

@@ -3,6 +3,7 @@ import sys
 import json
 import urllib.request
 import subprocess
+import zipfile
 
 CURRENT_VERSION = "v1.0.0"
 REPO_URL = "https://api.github.com/repos/mage19vn/magAutoTone/releases/latest"
@@ -25,13 +26,13 @@ def check_for_updates():
 
 def download_and_install_update(download_url, callback=None):
     try:
-        temp_exe = "magAutoTone_update.exe"
+        temp_zip = "magAutoTone_update.zip"
         
         if callback:
             callback("Đang tải bản cập nhật...")
             
         req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response, open(temp_exe, 'wb') as out_file:
+        with urllib.request.urlopen(req) as response, open(temp_zip, 'wb') as out_file:
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
             while True:
@@ -42,6 +43,25 @@ def download_and_install_update(download_url, callback=None):
                 downloaded += len(chunk)
                 if callback and total_size > 0:
                     callback(f"Đang tải... {int((downloaded / total_size) * 100)}%")
+
+        if callback:
+            callback("Đang giải nén...")
+
+        temp_exe = "magAutoTone_update.exe"
+        
+        # Nếu tải về là file ZIP thì giải nén lấy exe
+        if download_url.endswith('.zip'):
+            with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+                for file_info in zip_ref.infolist():
+                    if file_info.filename.endswith('.exe'):
+                        # Đổi tên file khi giải nén
+                        file_info.filename = temp_exe
+                        zip_ref.extract(file_info, path=".")
+                        break
+            os.remove(temp_zip)
+        else:
+            # Lỡ tải thẳng file .exe
+            os.rename(temp_zip, temp_exe)
 
         if callback:
             callback("Đang cài đặt...")
