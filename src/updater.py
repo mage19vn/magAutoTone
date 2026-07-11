@@ -45,26 +45,7 @@ def download_and_install_update(download_url, callback=None):
                     callback(f"Đang tải... {int((downloaded / total_size) * 100)}%")
 
         if callback:
-            callback("Đang giải nén...")
-
-        temp_exe = "magAutoTone_update.exe"
-        
-        # Nếu tải về là file ZIP thì giải nén lấy exe
-        if download_url.endswith('.zip'):
-            with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
-                for file_info in zip_ref.infolist():
-                    if file_info.filename.endswith('.exe'):
-                        # Đổi tên file khi giải nén
-                        file_info.filename = temp_exe
-                        zip_ref.extract(file_info, path=".")
-                        break
-            os.remove(temp_zip)
-        else:
-            # Lỡ tải thẳng file .exe
-            os.rename(temp_zip, temp_exe)
-
-        if callback:
-            callback("Đang cài đặt...")
+            callback("Đang thiết lập quá trình cài đặt...")
 
         current_exe = sys.executable if getattr(sys, 'frozen', False) else None
         
@@ -77,10 +58,32 @@ def download_and_install_update(download_url, callback=None):
         bat_path = "update_script.bat"
         with open(bat_path, "w", encoding="utf-8") as f:
             f.write(f"""@echo off
-timeout /t 2 /nobreak >nul
+:: Đợi ứng dụng hiện tại đóng lại hoàn toàn
+timeout /t 3 /nobreak >nul
+
+:: Đảm bảo ứng dụng cũ đã tắt
+taskkill /f /im "{exe_name}" >nul 2>&1
+
+:: Xóa file exe cũ
 del "{exe_name}"
-ren "{temp_exe}" "{exe_name}"
+
+:: Dùng PowerShell để giải nén file ZIP
+powershell Expand-Archive -Path "{temp_zip}" -DestinationPath "." -Force
+
+:: Nếu file trong ZIP có tên là magAutoTone.exe nhưng người dùng đã đổi tên file đang chạy, ta sẽ đổi tên lại cho khớp
+if not "{exe_name}"=="magAutoTone.exe" (
+    if exist "magAutoTone.exe" (
+        ren "magAutoTone.exe" "{exe_name}"
+    )
+)
+
+:: Xóa file ZIP tải về
+del "{temp_zip}"
+
+:: Mở ứng dụng mới
 start "" "{exe_name}"
+
+:: Tự xóa file bat này
 del "%~f0"
 """)
         
