@@ -122,10 +122,15 @@ class AutoToneApp(Tk):
         self.lbl_username = ctk.CTkLabel(header_actions, text=self.username, font=ctk.CTkFont(size=14, weight="bold"), text_color="#aaaaaa")
         self.lbl_username.grid(row=0, column=0, padx=(0, 15))
         
+        btn_help = ctk.CTkButton(header_actions, text="❓", width=40, height=40, corner_radius=20,
+                                 fg_color="transparent", hover_color="#333333", font=ctk.CTkFont(size=22),
+                                 command=self.open_help_window)
+        btn_help.grid(row=0, column=1, padx=(0, 10))
+
         btn_settings = ctk.CTkButton(header_actions, text="⚙️", width=40, height=40, corner_radius=20,
-                                  fg_color="transparent", hover_color="#333333", font=ctk.CTkFont(size=22),
-                                  command=self.open_settings)
-        btn_settings.grid(row=0, column=1, padx=0)
+                                   fg_color="transparent", hover_color="#333333", font=ctk.CTkFont(size=22),
+                                   command=self.open_settings)
+        btn_settings.grid(row=0, column=2, padx=0)
 
         # ------------------- DYNAMIC DROPZONE -------------------
         self.dropzone = ctk.CTkFrame(self, corner_radius=15, fg_color="#2b2b2b", border_width=2, border_color="#3b3b3b")
@@ -175,6 +180,49 @@ class AutoToneApp(Tk):
         # Context Menu
         self.context_menu = Menu(self, tearoff=0, bg="#2b2b2b", fg="white", font=("Helvetica", 11), activebackground=self.current_theme_color)
         self.context_menu.add_command(label="🪄 Tách Stem (Demucs)", command=self.start_separation)
+
+    def open_help_window(self):
+        help_win = ctk.CTkToplevel(self)
+        help_win.title("Hướng dẫn sử dụng")
+        help_win.geometry("550x500")
+        help_win.attributes("-topmost", True)
+        help_win.focus()
+        
+        # Căn giữa màn hình
+        self.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 550) // 2
+        y = self.winfo_y() + (self.winfo_height() - 500) // 2
+        help_win.geometry(f"+{x}+{y}")
+        
+        textbox = ctk.CTkTextbox(help_win, font=ctk.CTkFont(size=14), wrap="word")
+        textbox.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        help_text = """Chào mừng bạn đến với MagAutoTone!
+
+1. MỤC ĐÍCH:
+Phần mềm giúp bạn tự động nhận diện Tone (Scale) và Nhịp (BPM) của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).
+
+2. HƯỚNG DẪN NHANH:
+- Ở màn hình chính, hãy Kéo & Thả một file âm thanh (hoặc Click vào khung) để duyệt tìm file bài hát.
+- Ngay sau đó, AI sẽ tự động phân tích BPM và Tone.
+- Để tách nhạc cụ, nhấn vào nút "🎧 Tách Nhạc cụ & Vocal". Quá trình xử lý AI sẽ mất từ 1 đến vài phút tùy cấu hình máy của bạn.
+- Bấm "Mở thư mục" để lấy các file âm thanh đã được tách rời.
+
+3. TÙY CHỈNH NÂNG CAO (⚙️ Cài đặt):
+- Thư mục lưu: Nơi chứa file âm thanh sau khi tách.
+- Định dạng âm thanh xuất ra: WAV (chất lượng cao nhất), FLAC (lossless), MP3 (nhẹ nhất).
+- Màu chủ đạo: Chọn màu UI theo cá tính của bạn.
+- Kiểm tra cập nhật: Xem và cài đặt bản cập nhật phần mềm tự động.
+
+4. BẢO MẬT:
+- Bạn chỉ có thể đổi tên hiển thị trong ứng dụng khi có Mã bí mật.
+
+Chúc bạn có một trải nghiệm mượt mà với MagAutoTone!"""
+        textbox.insert("0.0", help_text)
+        textbox.configure(state="disabled") # Không cho phép sửa chữ
+        
+        # Đóng cửa sổ khi click ngoài
+        help_win.bind("<Escape>", lambda e: help_win.destroy())
 
     def open_settings(self):
         settings_win = ctk.CTkToplevel(self)
