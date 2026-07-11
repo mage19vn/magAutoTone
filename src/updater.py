@@ -45,7 +45,18 @@ def download_and_install_update(download_url, callback=None):
                     callback(f"Đang tải... {int((downloaded / total_size) * 100)}%")
 
         if callback:
-            callback("Đang thiết lập quá trình cài đặt...")
+            callback("Đang giải nén...")
+
+        temp_dir = "update_temp"
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+            
+        # Dùng Python giải nén vào thư mục tạm thay vì file zip để an toàn
+        with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+            
+        if callback:
+            callback("Đang cài đặt...")
 
         current_exe = sys.executable if getattr(sys, 'frozen', False) else None
         
@@ -55,39 +66,29 @@ def download_and_install_update(download_url, callback=None):
 
         exe_name = os.path.basename(current_exe)
         
+        # Script bat sao chép đè mọi thứ và dọn dẹp (tương tự DLYTB)
         bat_path = "update_script.bat"
-        with open(bat_path, "w", encoding="utf-8") as f:
-            f.write(f"""@echo off
-:: Đợi ứng dụng hiện tại đóng lại hoàn toàn
-timeout /t 3 /nobreak >nul
-
-:: Đảm bảo ứng dụng cũ đã tắt
-taskkill /f /im "{exe_name}" >nul 2>&1
-
-:: Xóa file exe cũ
-del "{exe_name}"
-
-:: Dùng PowerShell để giải nén file ZIP
-powershell Expand-Archive -Path "{temp_zip}" -DestinationPath "." -Force
-
-:: Nếu file trong ZIP có tên là magAutoTone.exe nhưng người dùng đã đổi tên file đang chạy, ta sẽ đổi tên lại cho khớp
-if not "{exe_name}"=="magAutoTone.exe" (
-    if exist "magAutoTone.exe" (
-        ren "magAutoTone.exe" "{exe_name}"
-    )
-)
-
-:: Xóa file ZIP tải về
+        bat_content = f"""@echo off
+set _MEIPASS2=
+set _MEIPASS=
+timeout /t 2 /nobreak >nul
+xcopy /s /y /e /q "{temp_dir}\\*" .
+rd /s /q "{temp_dir}"
 del "{temp_zip}"
-
-:: Mở ứng dụng mới
 start "" "{exe_name}"
-
-:: Tự xóa file bat này
 del "%~f0"
-""")
+"""
+        with open(bat_path, "w", encoding="utf-8") as f:
+            f.write(bat_content)
         
-        subprocess.Popen([bat_path], shell=True)
+        # Xoá biến môi trường PyInstaller để tránh lỗi đụng độ cache khi restart
+        env = os.environ.copy()
+        env.pop('_MEIPASS2', None)
+        env.pop('_MEIPASS', None)
+        
+        subprocess.Popen([bat_path], shell=True, env=env)
+        
+        # Thoát ứng dụng
         sys.exit(0)
     except Exception as e:
         print("Lỗi khi tải bản cập nhật:", e)
