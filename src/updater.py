@@ -66,13 +66,24 @@ def download_and_install_update(download_url, callback=None):
 
         exe_name = os.path.basename(current_exe)
         
-        # Script bat sao chép đè mọi thứ và dọn dẹp (tương tự DLYTB)
         bat_path = "update_script.bat"
         bat_content = f"""@echo off
 set _MEIPASS2=
 set _MEIPASS=
-timeout /t 2 /nobreak >nul
+echo Dang cho ung dung cu thoat hoan toan...
+:waitloop
+timeout /t 1 /nobreak >nul
+del "{exe_name}" 2>nul
+if exist "{exe_name}" goto waitloop
+
 xcopy /s /y /e /q "{temp_dir}\\*" .
+
+if not "{exe_name}"=="magAutoTone.exe" (
+    if exist "magAutoTone.exe" (
+        ren "magAutoTone.exe" "{exe_name}"
+    )
+)
+
 rd /s /q "{temp_dir}"
 del "{temp_zip}"
 start "" "{exe_name}"
