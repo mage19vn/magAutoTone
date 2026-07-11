@@ -16,6 +16,7 @@ except ImportError:
 from audio_processing import AudioAnalyzer
 from separation import StemSeparator
 from utils import get_resource_path
+from updater import check_for_updates, download_and_install_update, CURRENT_VERSION
 
 # Cấu hình giao diện Minimalist
 ctk.set_appearance_mode("Dark")
@@ -30,7 +31,7 @@ class AutoToneApp(Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("MagAutoTone - Dynamic UI")
+        self.title(f"MagAutoTone {CURRENT_VERSION} - Dynamic UI")
         self.geometry("600x700")
         self.minsize(600, 700)
 
@@ -46,6 +47,36 @@ class AutoToneApp(Tk):
         self.load_config()
 
         self.build_ui()
+        
+        # Tự động kiểm tra bản cập nhật
+        threading.Thread(target=self.bg_check_update, daemon=True).start()
+
+    def bg_check_update(self):
+        latest_version, download_url = check_for_updates()
+        if latest_version and download_url:
+            self.after(3000, lambda: self.prompt_update(latest_version, download_url))
+
+    def prompt_update(self, version, download_url):
+        ans = messagebox.askyesno("Bản cập nhật mới!", f"Đã có phiên bản {version}.\nBạn có muốn tải và cập nhật ngay không?")
+        if ans:
+            self.set_status(f"Đang chuẩn bị cập nhật lên {version}...", True)
+            threading.Thread(target=download_and_install_update, args=(download_url, self.update_callback), daemon=True).start()
+
+    def manual_check_update(self):
+        self.set_status("Đang kiểm tra cập nhật...", True)
+        def _check():
+            latest_version, download_url = check_for_updates()
+            self.after(0, lambda: self.set_status("", False))
+            if latest_version and download_url:
+                self.after(0, lambda: self.prompt_update(latest_version, download_url))
+            else:
+                self.after(0, lambda: messagebox.showinfo("Cập nhật", "Bạn đang sử dụng phiên bản mới nhất!"))
+        threading.Thread(target=_check, daemon=True).start()
+
+    def update_callback(self, msg):
+        self.after(0, lambda: self.set_status(msg, "Đang tải" in msg or "cài đặt" in msg))
+        if "Lỗi" in msg:
+            self.after(0, lambda: messagebox.showerror("Lỗi Cập nhật", msg))
 
     def load_config(self):
         if os.path.exists(self.config_path):
@@ -148,7 +179,7 @@ class AutoToneApp(Tk):
     def open_settings(self):
         settings_win = ctk.CTkToplevel(self)
         settings_win.title("Cài đặt")
-        settings_win.geometry("520x620")
+        settings_win.geometry("520x720")
         settings_win.resizable(False, False)
         settings_win.transient(self) # Gắn với cửa sổ chính
         
@@ -235,6 +266,22 @@ class AutoToneApp(Tk):
                                              fg_color=self.current_theme_color, hover_color=self.current_theme_color,
                                              command=self.open_rename_popup)
         self.btn_change_name.grid(row=1, column=1, padx=(0, 20), pady=(0, 20))
+
+        # --- Card 5: Cập nhật ---
+        card5 = ctk.CTkFrame(settings_win, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
+        card5.grid(row=5, column=0, sticky="ew", padx=30, pady=(0, 20))
+        card5.grid_columnconfigure(0, weight=1)
+        
+        lbl_update_title = ctk.CTkLabel(card5, text="🔄 Cập nhật phần mềm", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_update_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(15, 5))
+        
+        lbl_version = ctk.CTkLabel(card5, text=f"Phiên bản hiện tại: {CURRENT_VERSION}", text_color="gray")
+        lbl_version.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 15))
+        
+        btn_update = ctk.CTkButton(card5, text="Kiểm tra", width=80, height=32, corner_radius=16,
+                                   fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333",
+                                   command=self.manual_check_update)
+        btn_update.grid(row=1, column=1, sticky="e", padx=20, pady=(0, 15))
 
     def _change_output_format(self, choice):
         self.output_format = choice
