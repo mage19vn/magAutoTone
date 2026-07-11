@@ -184,44 +184,59 @@ class AutoToneApp(Tk):
     def open_help_window(self):
         help_win = ctk.CTkToplevel(self)
         help_win.title("Hướng dẫn sử dụng")
-        help_win.geometry("550x500")
+        help_win.geometry("600x650")
         help_win.attributes("-topmost", True)
         help_win.focus()
         
         # Căn giữa màn hình
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 550) // 2
-        y = self.winfo_y() + (self.winfo_height() - 500) // 2
+        x = self.winfo_x() + (self.winfo_width() - 600) // 2
+        y = self.winfo_y() + (self.winfo_height() - 650) // 2
         help_win.geometry(f"+{x}+{y}")
         
-        textbox = ctk.CTkTextbox(help_win, font=ctk.CTkFont(size=14), wrap="word")
-        textbox.pack(fill="both", expand=True, padx=20, pady=20)
+        # Tiêu đề
+        header = ctk.CTkLabel(help_win, text="🌟 Hướng dẫn sử dụng MagAutoTone", 
+                              font=ctk.CTkFont(size=22, weight="bold"), text_color=self.current_theme_color)
+        header.pack(pady=(25, 15))
         
-        help_text = """Chào mừng bạn đến với MagAutoTone!
-
-1. MỤC ĐÍCH:
-Phần mềm giúp bạn tự động nhận diện Tone (Scale) và Nhịp (BPM) của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).
-
-2. HƯỚNG DẪN NHANH:
-- Ở màn hình chính, hãy Kéo & Thả một file âm thanh (hoặc Click vào khung) để duyệt tìm file bài hát.
-- Ngay sau đó, AI sẽ tự động phân tích BPM và Tone.
-- Để tách nhạc cụ, nhấn vào nút "🎧 Tách Nhạc cụ & Vocal". Quá trình xử lý AI sẽ mất từ 1 đến vài phút tùy cấu hình máy của bạn.
-- Bấm "Mở thư mục" để lấy các file âm thanh đã được tách rời.
-
-3. TÙY CHỈNH NÂNG CAO (⚙️ Cài đặt):
-- Thư mục lưu: Nơi chứa file âm thanh sau khi tách.
-- Định dạng âm thanh xuất ra: WAV (chất lượng cao nhất), FLAC (lossless), MP3 (nhẹ nhất).
-- Màu chủ đạo: Chọn màu UI theo cá tính của bạn.
-- Kiểm tra cập nhật: Xem và cài đặt bản cập nhật phần mềm tự động.
-
-4. BẢO MẬT:
-- Bạn chỉ có thể đổi tên hiển thị trong ứng dụng khi có Mã bí mật.
-
-Chúc bạn có một trải nghiệm mượt mà với MagAutoTone!"""
-        textbox.insert("0.0", help_text)
-        textbox.configure(state="disabled") # Không cho phép sửa chữ
+        # Khung cuộn chứa các thẻ
+        scroll_frame = ctk.CTkScrollableFrame(help_win, fg_color="transparent")
+        scroll_frame.pack(fill="both", expand=True, padx=25, pady=(0, 20))
         
-        # Đóng cửa sổ khi click ngoài
+        def create_card(parent, title, content, icon):
+            card = ctk.CTkFrame(parent, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
+            card.pack(fill="x", pady=(0, 15))
+            
+            lbl_title = ctk.CTkLabel(card, text=f"{icon} {title}", font=ctk.CTkFont(size=16, weight="bold"), text_color="#e0e0e0")
+            lbl_title.pack(anchor="w", padx=20, pady=(15, 5))
+            
+            lbl_content = ctk.CTkLabel(card, text=content, font=ctk.CTkFont(size=14), text_color="#cccccc", justify="left", wraplength=480)
+            lbl_content.pack(anchor="w", padx=20, pady=(0, 15))
+        
+        create_card(scroll_frame, "MỤC ĐÍCH", 
+                    "Phần mềm giúp bạn tự động nhận diện Tone (Scale) và Nhịp (BPM) của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).", 
+                    "🎯")
+                    
+        create_card(scroll_frame, "HƯỚNG DẪN NHANH", 
+                    "• Ở màn hình chính, hãy Kéo & Thả một file âm thanh (hoặc Click vào khung) để duyệt tìm file.\n"
+                    "• Ngay sau đó, AI sẽ tự động phân tích BPM và Tone cho bài hát.\n"
+                    "• Để tách nhạc cụ, nhấn vào nút '🎧 Tách Nhạc cụ & Vocal'. Quá trình xử lý AI sẽ mất từ 1 đến vài phút tùy cấu hình máy của bạn.\n"
+                    "• Bấm 'Mở thư mục' để lấy các file âm thanh đã được tách rời.", 
+                    "⚡")
+                    
+        create_card(scroll_frame, "TÙY CHỈNH NÂNG CAO", 
+                    "Nhấn vào nút ⚙️ Cài đặt để thiết lập:\n"
+                    "• Thư mục lưu: Nơi chứa file âm thanh sau khi tách.\n"
+                    "• Định dạng xuất ra: WAV (chất lượng cao nhất), FLAC (lossless), MP3 (nhẹ nhất).\n"
+                    "• Màu chủ đạo: Thay đổi toàn bộ màu sắc giao diện theo ý muốn.\n"
+                    "• Cập nhật: Tự động kiểm tra và cài đặt phiên bản phần mềm mới nhất.", 
+                    "⚙️")
+                    
+        create_card(scroll_frame, "BẢO MẬT", 
+                    "• Bạn chỉ có thể đổi tên hiển thị trong ứng dụng khi có Secret code (Mã bí mật) được cung cấp.", 
+                    "🔒")
+        
+        # Đóng cửa sổ khi ấn Esc
         help_win.bind("<Escape>", lambda e: help_win.destroy())
 
     def open_settings(self):
