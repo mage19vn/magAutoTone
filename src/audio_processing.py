@@ -3,9 +3,7 @@ import librosa
 import numpy as np
 import tempfile
 from moviepy import VideoFileClip
-import matplotlib
-matplotlib.use('Agg') # Backend cho headless plotting
-import matplotlib.pyplot as plt
+
 
 class AudioAnalyzer:
     def __init__(self):
@@ -60,9 +58,41 @@ class AudioAnalyzer:
             
             if progress_callback:
                 progress_callback("Đang tính toán BPM (Nhịp điệu)...")
-            tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-            # Tempo có thể là mảng, lấy giá trị đầu
-            bpm = tempo[0] if isinstance(tempo, np.ndarray) else tempo
+            
+            import scipy.signal
+            
+            # Trích xuất đường bao nhịp điệu với độ phân giải cao (hop_length=128)
+            onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=128)
+            
+            # Phân tích biểu đồ nhịp độ (tempogram) để tìm BPM chính xác tuyệt đối
+            tempogram = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr, hop_length=128)
+            mean_tempogram = np.mean(tempogram, axis=1)
+            bpms = librosa.tempo_frequencies(tempogram.shape[0], sr=sr, hop_length=128)
+            
+            # Áp dụng bộ lọc Log-Normal Prior (trung tâm 120 BPM) để khử nhiễu octave (nhân đôi/chia đôi nhịp)
+            safe_bpms = np.clip(bpms, 1e-5, None)
+            prior = np.exp(-0.5 * ((np.log2(safe_bpms) - np.log2(120.0)) / 1.0)**2)
+            weighted_tempogram = mean_tempogram * prior
+            
+            # Tìm các đỉnh (peaks)
+            peaks, _ = scipy.signal.find_peaks(weighted_tempogram)
+            if len(peaks) > 0:
+                best_peak = peaks[np.argmax(weighted_tempogram[peaks])]
+                
+                # Nội suy Parabol (Parabolic Interpolation) để có số thập phân cực kỳ chính xác
+                alpha = weighted_tempogram[best_peak - 1] if best_peak > 0 else weighted_tempogram[best_peak]
+                beta = weighted_tempogram[best_peak]
+                gamma = weighted_tempogram[best_peak + 1] if best_peak < len(weighted_tempogram) - 1 else weighted_tempogram[best_peak]
+                
+                if alpha == beta and beta == gamma:
+                    exact_bin = float(best_peak)
+                else:
+                    p = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma)
+                    exact_bin = best_peak + p
+                    
+                bpm = np.interp(exact_bin, np.arange(len(bpms)), bpms)
+            else:
+                bpm = 120.0
 
             if progress_callback:
                 progress_callback("Đang tính toán Key (Tông nhạc)...")
@@ -71,14 +101,18 @@ class AudioAnalyzer:
             key, scale = self._estimate_key(chroma)
             musical_key = f"{key} {scale}"
 
+            # Lấy mảng min/max envelope của waveform để vẽ trên UI
+            envelope = self.get_waveform_envelope(num_points=4000)
+            
+            # Gửi tín hiệu hoàn tất
             if progress_callback:
-                progress_callback("Đang tạo biểu đồ sóng âm (Waveform)...")
-            waveform_img = self.generate_waveform_image(color)
+                progress_callback("Hoàn tất phân tích.")
 
             if progress_callback:
                 progress_callback("Đang tạo tệp phát lại đồng bộ...")
             import soundfile as sf
-            playback_path = os.path.join(tempfile.gettempdir(), "playback_temp.wav")
+            import uuid
+            playback_path = os.path.join(tempfile.gettempdir(), f"playback_temp_{uuid.uuid4().hex[:8]}.wav")
             sf.write(playback_path, y, sr)
 
             return {
@@ -86,7 +120,7 @@ class AudioAnalyzer:
                 "key": musical_key,
                 "duration": duration_str,
                 "duration_secs": float(duration_secs),
-                "waveform": waveform_img,
+                "waveform_envelope": envelope,
                 "playback_file": playback_path
             }
 
@@ -117,23 +151,36 @@ class AudioAnalyzer:
             
         return self.key_names[key_idx], scale
 
-    def generate_waveform_image(self, color="#1f6aa5") -> str:
+    def get_waveform_envelope(self, num_points=4000) -> list:
         """
-        Vẽ waveform từ dữ liệu đã cache và lưu vào file ảnh tạm thời, trả về đường dẫn.
+        Trích xuất đường bao (envelope) của sóng âm dưới dạng tập hợp các điểm (min, max)
+        để vẽ nhanh trên Canvas.
         """
-        if self.last_y is None or self.last_sr is None:
-            raise Exception("Chưa có dữ liệu âm thanh để vẽ.")
+        if self.last_y is None or len(self.last_y) == 0:
+            return []
             
-        fig = plt.figure(figsize=(8, 2.5))
-        ax = fig.add_axes([0, 0, 1, 1])
-        ax.margins(x=0.02, y=0.1)
+        y = self.last_y
         
-        max_time = len(self.last_y) / self.last_sr
-        ax.plot(np.linspace(0, max_time, num=len(self.last_y)), self.last_y, color=color, linewidth=1.2, alpha=0.9)
-        ax.axis("off")
+        # Nếu audio ngắn hơn số điểm yêu cầu, ta vẽ luôn y
+        if len(y) <= num_points:
+            return [(val, val) for val in y]
+            
+        # Chia mảng thành các chunk đều nhau
+        chunk_size = len(y) // num_points
         
-        temp_img = os.path.join(tempfile.gettempdir(), "waveform.png")
-        plt.savefig(temp_img, transparent=True)
-        plt.close(fig)
+        # Để nhanh nhất, reshape mảng thành 2D và lấy min, max theo trục 1
+        # Phải cắt bớt phần thừa cuối cùng để chia hết cho chunk_size
+        truncated_length = chunk_size * num_points
+        y_truncated = y[:truncated_length]
+        y_reshaped = y_truncated.reshape((num_points, chunk_size))
         
-        return temp_img
+        mins = np.min(y_reshaped, axis=1)
+        maxs = np.max(y_reshaped, axis=1)
+        
+        # Normalize để max amplitude là 1.0
+        max_abs = max(abs(np.min(mins)), abs(np.max(maxs)))
+        if max_abs > 0:
+            mins = mins / max_abs
+            maxs = maxs / max_abs
+            
+        return list(zip(mins.tolist(), maxs.tolist()))

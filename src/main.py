@@ -281,21 +281,19 @@ class AutoToneApp(Tk):
         self.waveform_frame.grid_propagate(False) # Khóa chặt chiều cao
         self.waveform_frame.grid_remove() # Ẩn đi ban đầu
         
-        self.waveform_label = ctk.CTkLabel(self.waveform_frame, text="", cursor="hand2")
-        self.waveform_label.pack(fill="both", expand=True, padx=10, pady=8)
+        # Tạo canvas thay vì label
+        import tkinter as tk
+        self.waveform_canvas = tk.Canvas(self.waveform_frame, bg="#1a1a1a", highlightthickness=0)
+        self.waveform_canvas.pack(fill="both", expand=True, padx=10, pady=8)
         
-        self.playhead = ctk.CTkFrame(self.waveform_label, width=2, fg_color="#ffcc00", cursor="sb_h_double_arrow")
-        self.playhead.place(relx=0.0, rely=0.0, relheight=1.0)
-        self.playhead.place_forget()
+        self.waveform_envelope = []
+        self.playhead_id = None
         
-        # Bind events cho việc tua nhạc (Seek)
-        self.waveform_label.bind("<Button-1>", self._on_timeline_click)
-        self.waveform_label.bind("<B1-Motion>", self._on_timeline_drag)
-        self.waveform_label.bind("<ButtonRelease-1>", lambda e: self._seek_to_event(e, apply_play=True))
-        
-        self.playhead.bind("<Button-1>", self._on_timeline_click)
-        self.playhead.bind("<B1-Motion>", self._on_timeline_drag)
-        self.playhead.bind("<ButtonRelease-1>", lambda e: self._seek_to_event(e, apply_play=True))
+        # Bind events cho việc tua nhạc (Seek) và thay đổi kích thước (Resize)
+        self.waveform_canvas.bind("<Configure>", self._on_canvas_resize)
+        self.waveform_canvas.bind("<Button-1>", self._on_timeline_click)
+        self.waveform_canvas.bind("<B1-Motion>", self._on_timeline_drag)
+        self.waveform_canvas.bind("<ButtonRelease-1>", lambda e: self._seek_to_event(e, apply_play=True))
 
         # ------------------- ACTION BUTTONS -------------------
         self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -946,9 +944,9 @@ class AutoToneApp(Tk):
         self.bpm_card["value"].configure(text="...", text_color="#555555")
         self.key_card["value"].configure(text="...", text_color="#555555")
         self.duration_card["value"].configure(text="...", text_color="#555555")
-        empty_img = ctk.CTkImage(Image.new("RGBA", (1, 1), (0,0,0,0)), size=(1, 1))
-        self.waveform_label.configure(image=empty_img, text="")
-        self.waveform_label.image = empty_img
+        self.waveform_envelope = []
+        self.waveform_canvas.delete("all")
+        self.playhead_id = None
         # Disable tách stem khi đang phân tích
         self.btn_separate.configure(state="disabled")
         
@@ -978,12 +976,16 @@ class AutoToneApp(Tk):
 
     def _update_analysis_ui(self, result):
         # Update info cards with results
-        self.bpm_card["value"].configure(text=str(result['bpm']), text_color=self.current_theme_color)
+        # Làm tròn BPM thành số nguyên để hiển thị to
+        display_bpm = int(round(result['bpm']))
+        self.bpm_card["value"].configure(text=str(display_bpm), text_color=self.current_theme_color)
         self.key_card["value"].configure(text=result['key'], text_color=self.current_theme_color)
         self.duration_card["value"].configure(text=result.get('duration', '--'), text_color=self.current_theme_color)
         
         # Tooltips data
-        self.bpm_card["card"].tooltip_text = f"Tempo bài hát là {result['bpm']} nhịp/phút."
+        min_bpm = int(result['bpm'])
+        max_bpm = min_bpm + 1
+        self.bpm_card["card"].tooltip_text = f"Tempo rơi vào khoảng {min_bpm} - {max_bpm} nhịp/phút"
         
         k, s = result['key'].split(' ') if ' ' in result['key'] else (result['key'], "Major")
         notes_str = self._get_scale_notes(k, s)
@@ -997,34 +999,77 @@ class AutoToneApp(Tk):
             self.duration_card["card"].tooltip_text = f"Độ dài {duration_str}"
         
         
-        self._display_waveform(result["waveform"])
+        self.waveform_envelope = result.get("waveform_envelope", [])
+        self._draw_waveform_on_canvas()
         self.audio_duration = result.get("duration_secs", 0.0)
         self.playback_file = result.get("playback_file", self.selected_file)
         self.playback_start_offset = 0.0
-        self.playhead.place(relx=0.01923) # Vị trí bắt đầu của sóng âm sau margin
-        self.playhead.place_forget()
+        
+        self._update_playhead_visual(0.0)
         
         self.set_status("", is_loading=False)
         # Enable nút tách stem
         self.btn_separate.configure(state="normal")
         
-    def _display_waveform(self, img_path):
-        try:
-            self.waveform_label.update_idletasks()
-            target_width = self.waveform_label.winfo_width()
-            if target_width < 100:
-                target_width = 508
+    def _on_canvas_resize(self, event):
+        if self.waveform_envelope:
+            self._draw_waveform_on_canvas()
+            
+    def _draw_waveform_on_canvas(self):
+        self.waveform_canvas.delete("all")
+        if not self.waveform_envelope:
+            return
+            
+        width = self.waveform_canvas.winfo_width()
+        height = self.waveform_canvas.winfo_height()
+        if width <= 1 or height <= 1:
+            return
+            
+        # Nội suy/lấy mẫu lại envelope để khớp chính xác với số pixel chiều rộng
+        import math
+        points_len = len(self.waveform_envelope)
+        
+        # Khoảng đệm 25% phía trên và dưới
+        vertical_padding_factor = 0.8
+        max_h = height * vertical_padding_factor
+        center_y = height / 2
+        
+        color = self.current_theme_color
+        
+        # Vẽ từng vạch đứng (1 pixel/vạch)
+        for x in range(width):
+            idx = int((x / width) * points_len)
+            if idx >= points_len: idx = points_len - 1
+            min_val, max_val = self.waveform_envelope[idx]
+            
+            y1 = center_y - (max_val * max_h / 2)
+            y2 = center_y - (min_val * max_h / 2)
+            
+            # Chỉ vẽ nếu có độ dài (tránh vạch rác)
+            if y2 - y1 >= 1:
+                self.waveform_canvas.create_line(x, y1, x, y2, fill=color, width=1)
                 
-            wf_img = Image.open(img_path)
-            ratio = target_width / wf_img.width
-            target_height = min(int(wf_img.height * ratio), 140) # Khóa max height
+        # Vẽ lại playhead sau khi canvas bị xóa
+        self.playhead_id = self.waveform_canvas.create_line(0, 0, 0, height, fill="#ffcc00", width=2)
+        
+        # Cập nhật đúng vị trí
+        if self.audio_duration > 0:
+            pos_ms = getattr(pygame.mixer.music, 'get_pos', lambda: -1)()
+            if pos_ms >= 0 and self.is_playing:
+                current_time = self.playback_start_offset + (pos_ms / 1000.0)
+            else:
+                current_time = self.playback_start_offset
             
-            ctk_img = ctk.CTkImage(light_image=wf_img, dark_image=wf_img, size=(target_width, target_height))
-            self.waveform_label.configure(image=ctk_img, text="")
+            relx = current_time / self.audio_duration
+            self._update_playhead_visual(max(0.0, min(1.0, relx)))
             
-            self.waveform_label.bind("<Button-3>", self.show_context_menu)
-        except Exception as e:
-            print(f"Lỗi hiển thị waveform: {e}")
+    def _update_playhead_visual(self, relx):
+        if self.playhead_id is None:
+            return
+        width = self.waveform_canvas.winfo_width()
+        height = self.waveform_canvas.winfo_height()
+        x_px = int(relx * width)
+        self.waveform_canvas.coords(self.playhead_id, x_px, 0, x_px, height)
 
     def show_context_menu(self, event):
         if self.selected_file:
@@ -1078,22 +1123,16 @@ class AutoToneApp(Tk):
         self._seek_to_event(event, apply_play=False)
 
     def _seek_to_event(self, event, apply_play=True):
-        widget_width = self.waveform_label.winfo_width()
+        widget_width = self.waveform_canvas.winfo_width()
         if widget_width <= 0: return
         
-        # Sóng âm thực tế nằm từ 1.923% đến 98.077% do ax.margins(x=0.02)
-        start_relx = 0.01923
-        end_relx = 0.98077
-        span_relx = end_relx - start_relx
-        
         raw_relx = event.x / widget_width
-        # Ràng buộc trong vùng sóng âm thực
-        clamped_relx = max(start_relx, min(end_relx, raw_relx))
+        clamped_relx = max(0.0, min(1.0, raw_relx))
         
-        self.playhead.place(relx=clamped_relx)
+        self._update_playhead_visual(clamped_relx)
         
         # Tính toán thời gian (0 -> duration tương ứng với start_relx -> end_relx)
-        progress = (clamped_relx - start_relx) / span_relx
+        progress = clamped_relx
         target_time = progress * self.audio_duration
         self.playback_start_offset = target_time
         
@@ -1118,16 +1157,12 @@ class AutoToneApp(Tk):
                     self.is_playing = False
                     self.btn_play.configure(text="▶  Nghe thử", text_color="#dddddd")
                     self.playback_start_offset = 0.0
-                    self.playhead.place(relx=0.01923)
+                    self._update_playhead_visual(0.0)
                     pygame.mixer.music.stop()
                     return
                 
-                start_relx = 0.01923
-                end_relx = 0.98077
                 progress = current_time / self.audio_duration
-                relx = start_relx + progress * (end_relx - start_relx)
-                
-                self.playhead.place(relx=max(start_relx, min(end_relx, relx)))
+                self._update_playhead_visual(max(0.0, min(1.0, progress)))
         except:
             pass
             

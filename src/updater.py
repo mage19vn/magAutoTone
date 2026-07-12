@@ -5,7 +5,7 @@ import urllib.request
 import subprocess
 import zipfile
 
-CURRENT_VERSION = "v1.0.9"
+CURRENT_VERSION = "v1.0.10"
 REPO_URL = "https://api.github.com/repos/mage19vn/magAutoTone/releases/latest"
 
 def check_for_updates():
