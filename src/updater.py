@@ -5,7 +5,7 @@ import urllib.request
 import subprocess
 import zipfile
 
-CURRENT_VERSION = "v1.0.7"
+CURRENT_VERSION = "v1.0.8"
 REPO_URL = "https://api.github.com/repos/mage19vn/magAutoTone/releases/latest"
 
 def check_for_updates():
@@ -100,7 +100,7 @@ del "%~f0"
         subprocess.Popen([bat_path], shell=True, env=env)
         
         # Thoát ứng dụng
-        sys.exit(0)
+        os._exit(0)
     except Exception as e:
         print("Lỗi khi tải bản cập nhật:", e)
         if callback:
