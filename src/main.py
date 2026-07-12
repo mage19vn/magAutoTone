@@ -392,80 +392,74 @@ class AutoToneApp(Tk):
     def open_help_window(self):
         help_win = ctk.CTkToplevel(self)
         help_win.title("Hướng dẫn sử dụng")
-        help_win.geometry("600x650")
+        help_win.geometry("500x520")
         help_win.attributes("-topmost", True)
         help_win.focus()
         
         # Căn giữa màn hình
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 600) // 2
-        y = self.winfo_y() + (self.winfo_height() - 650) // 2
+        x = self.winfo_x() + (self.winfo_width() - 500) // 2
+        y = self.winfo_y() + (self.winfo_height() - 520) // 2
         help_win.geometry(f"+{x}+{y}")
         
-        # Tiêu đề
-        header = ctk.CTkLabel(help_win, text="🌟 Hướng dẫn sử dụng MagAutoTone", 
+        # Header
+        header_frame = ctk.CTkFrame(help_win, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(25, 10))
+        
+        icon_lbl = ctk.CTkLabel(header_frame, text="📖", font=ctk.CTkFont(size=36))
+        icon_lbl.pack()
+        
+        header = ctk.CTkLabel(header_frame, text="Hướng dẫn magAutoTone", 
                               font=ctk.CTkFont(size=22, weight="bold"), text_color=self.current_theme_color)
-        header.pack(pady=(25, 15))
+        header.pack(pady=(5, 0))
         
-        # Khung cuộn chứa các thẻ
-        scroll_frame = ctk.CTkScrollableFrame(help_win, fg_color="transparent")
-        scroll_frame.pack(fill="both", expand=True, padx=25, pady=(0, 20))
+        # Tabview
+        tabview = ctk.CTkTabview(help_win, corner_radius=12,
+                                 segmented_button_selected_color=self.current_theme_color,
+                                 segmented_button_selected_hover_color=self.current_theme_color)
+        tabview.pack(padx=30, pady=(5, 25), fill="both", expand=True)
         
-        def create_card(parent, title, content, icon):
-            card = ctk.CTkFrame(parent, corner_radius=15, fg_color="#2b2b2b", border_width=2, border_color="#3b3b3b")
-            card.pack(fill="x", pady=(0, 20))
-            
-            title_frame = ctk.CTkFrame(card, fg_color="transparent")
-            title_frame.pack(anchor="w", fill="x", padx=20, pady=(20, 10))
-            
-            icon_lbl = ctk.CTkLabel(title_frame, text=icon, width=44, height=44, corner_radius=22, 
-                                     fg_color="#1f1f1f", text_color=self.current_theme_color, font=ctk.CTkFont(size=22))
-            icon_lbl.pack(side="left")
-            
-            lbl_title = ctk.CTkLabel(title_frame, text=title, font=ctk.CTkFont(size=17, weight="bold"), text_color="#ffffff")
-            lbl_title.pack(side="left", padx=(15, 0))
-            
-            divider = ctk.CTkFrame(card, height=1, fg_color="#3d3d3d")
-            divider.pack(fill="x", padx=20, pady=(0, 15))
-            
-            lbl_content = ctk.CTkLabel(card, text=content, font=ctk.CTkFont(size=14), text_color="#cccccc", justify="left", wraplength=480)
-            lbl_content.pack(anchor="w", padx=20, pady=(0, 20))
-            
-            # Hover effect
-            def on_enter(e): card.configure(border_color=self.current_theme_color)
-            def on_leave(e): card.configure(border_color="#3b3b3b")
-            
-            card.bind("<Enter>", on_enter)
-            card.bind("<Leave>", on_leave)
-            title_frame.bind("<Enter>", on_enter)
-            title_frame.bind("<Leave>", on_leave)
-            icon_lbl.bind("<Enter>", on_enter)
-            lbl_title.bind("<Enter>", on_enter)
-            divider.bind("<Enter>", on_enter)
-            lbl_content.bind("<Enter>", on_enter)
+        tab_main = tabview.add("🚀 Cơ bản")
+        tab_adv = tabview.add("⚙️ Nâng cao")
+        tab_about = tabview.add("💡 Ứng dụng")
         
-        create_card(scroll_frame, "MỤC ĐÍCH", 
-                    "Phần mềm giúp bạn tự động nhận diện Tone (Scale), Nhịp (BPM) và Thời lượng của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).", 
-                    "🎯")
-                    
-        create_card(scroll_frame, "HƯỚNG DẪN NHANH", 
-                    "• Ở màn hình chính, hãy Kéo & Thả một file âm thanh (hoặc Click vào khung) để duyệt tìm file.\n"
-                    "• Ngay sau đó, AI sẽ tự động phân tích BPM, Tone và Thời lượng. Bạn có thể di chuột vào từng thẻ để xem thông tin chi tiết (ví dụ: các nốt nhạc chính của Tone).\n"
-                    "• Để tách nhạc cụ, nhấn vào nút '🎧 Tách Nhạc cụ & Vocal'. Quá trình xử lý AI sẽ mất từ 1 đến vài phút tùy cấu hình máy của bạn.\n"
-                    "• Bấm 'Mở thư mục' để lấy các file âm thanh đã được tách rời.", 
-                    "⚡")
-                    
-        create_card(scroll_frame, "TÙY CHỈNH NÂNG CAO", 
-                    "Nhấn vào nút ⚙️ Cài đặt để thiết lập:\n"
-                    "• Thư mục lưu: Nơi chứa file âm thanh sau khi tách.\n"
-                    "• Định dạng xuất ra: WAV (chất lượng cao nhất), FLAC (lossless), MP3 (nhẹ nhất).\n"
-                    "• Màu chủ đạo: Thay đổi toàn bộ màu sắc giao diện theo ý muốn.\n"
-                    "• Cập nhật: Tự động kiểm tra và cài đặt phiên bản phần mềm mới nhất.", 
-                    "⚙️")
-                    
-        create_card(scroll_frame, "BẢO MẬT", 
-                    "• Bạn chỉ có thể đổi tên hiển thị trong ứng dụng khi có Secret code (Mã bí mật) được cung cấp.", 
-                    "🔒")
+        # --- Tab Cơ bản ---
+        steps = [
+            ("1. Chọn file:", "Kéo thả hoặc Click để mở file nhạc."),
+            ("2. Xem Info:", "AI tự phân tích Nhịp, Tone & Độ dài. Di chuột vào để xem nốt nhạc chi tiết."),
+            ("3. Tách Stem:", "Nhấn '🎧 Tách Nhạc cụ' và đợi AI xử lý từ 1-3 phút."),
+            ("4. Kết quả:", "Nhấn 'Mở thư mục' để lấy file thành phẩm.")
+        ]
+        tab_main.grid_columnconfigure(1, weight=1)
+        for i, (title, desc) in enumerate(steps):
+            ctk.CTkLabel(tab_main, text=title, font=ctk.CTkFont(size=14, weight="bold"), anchor="nw", text_color=self.current_theme_color).grid(row=i, column=0, sticky="nw", padx=(15, 10), pady=10)
+            ctk.CTkLabel(tab_main, text=desc, font=ctk.CTkFont(size=14), wraplength=250, justify="left", anchor="nw", text_color="#dddddd").grid(row=i, column=1, sticky="nw", padx=(0, 15), pady=10)
+            
+        # --- Tab Nâng cao ---
+        advs = [
+            ("📁 Thư mục:", "Thay đổi nơi lưu file kết quả mặc định."),
+            ("🎵 Định dạng:", "Chọn WAV (Chất lượng gốc), FLAC (Lossless) hoặc MP3 (Nhẹ)."),
+            ("🎛️ Chế độ:", "Chọn tách 2 phần (Nhạc & Vocal) hoặc 4 phần đầy đủ."),
+            ("🎨 Giao diện:", "Tùy biến màu sắc toàn app theo sở thích.")
+        ]
+        tab_adv.grid_columnconfigure(1, weight=1)
+        for i, (title, desc) in enumerate(advs):
+            ctk.CTkLabel(tab_adv, text=title, font=ctk.CTkFont(size=14, weight="bold"), anchor="nw", text_color="#ffffff").grid(row=i, column=0, sticky="nw", padx=(15, 10), pady=12)
+            ctk.CTkLabel(tab_adv, text=desc, font=ctk.CTkFont(size=14), text_color="#cccccc", wraplength=250, justify="left", anchor="nw").grid(row=i, column=1, sticky="nw", padx=(0, 15), pady=12)
+            
+        # --- Tab Ứng dụng ---
+        about_text = (
+            "magAutoTone là trợ thủ đắc lực hỗ trợ tách Stem âm nhạc tự động sử dụng sức mạnh của Trí tuệ nhân tạo (AI).\n\n"
+            "🎯 Nhận diện tự động Tempo & Tone nhạc.\n\n"
+            "🎤 Tách lời hát và nhạc cụ cực chuẩn xác.\n\n"
+            "🔒 Hỗ trợ đổi tên qua mã xác thực bảo mật."
+        )
+        
+        textbox = ctk.CTkTextbox(tab_about, font=ctk.CTkFont(size=15), text_color="#cccccc", 
+                                 fg_color="transparent", wrap="word")
+        textbox.pack(fill="both", expand=True, padx=15, pady=20)
+        textbox.insert("0.0", about_text)
+        textbox.configure(state="disabled")
         
         # Đóng cửa sổ khi ấn Esc
         help_win.bind("<Escape>", lambda e: help_win.destroy())
