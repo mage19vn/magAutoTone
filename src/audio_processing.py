@@ -75,11 +75,19 @@ class AudioAnalyzer:
                 progress_callback("Đang tạo biểu đồ sóng âm (Waveform)...")
             waveform_img = self.generate_waveform_image(color)
 
+            if progress_callback:
+                progress_callback("Đang tạo tệp phát lại đồng bộ...")
+            import soundfile as sf
+            playback_path = os.path.join(tempfile.gettempdir(), "playback_temp.wav")
+            sf.write(playback_path, y, sr)
+
             return {
                 "bpm": round(float(bpm), 2),
                 "key": musical_key,
                 "duration": duration_str,
-                "waveform": waveform_img
+                "duration_secs": float(duration_secs),
+                "waveform": waveform_img,
+                "playback_file": playback_path
             }
 
         except Exception as e:
@@ -116,13 +124,16 @@ class AudioAnalyzer:
         if self.last_y is None or self.last_sr is None:
             raise Exception("Chưa có dữ liệu âm thanh để vẽ.")
             
-        plt.figure(figsize=(8, 2.5))
-        plt.plot(np.linspace(0, len(self.last_y)/self.last_sr, num=len(self.last_y)), self.last_y, color=color, linewidth=1.2, alpha=0.9)
-        plt.axis("off")
-        plt.tight_layout(pad=0)
+        fig = plt.figure(figsize=(8, 2.5))
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.margins(x=0.02, y=0.1)
+        
+        max_time = len(self.last_y) / self.last_sr
+        ax.plot(np.linspace(0, max_time, num=len(self.last_y)), self.last_y, color=color, linewidth=1.2, alpha=0.9)
+        ax.axis("off")
         
         temp_img = os.path.join(tempfile.gettempdir(), "waveform.png")
         plt.savefig(temp_img, transparent=True)
-        plt.close()
+        plt.close(fig)
         
         return temp_img

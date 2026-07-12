@@ -5,7 +5,7 @@ import urllib.request
 import subprocess
 import zipfile
 
-CURRENT_VERSION = "v1.0.8"
+CURRENT_VERSION = "v1.0.9"
 REPO_URL = "https://api.github.com/repos/mage19vn/magAutoTone/releases/latest"
 
 def check_for_updates():
@@ -86,7 +86,7 @@ if not "{exe_name}"=="magAutoTone.exe" (
 
 rd /s /q "{temp_dir}"
 del "{temp_zip}"
-start "" "{exe_name}"
+start "" "{exe_name}" --updated
 del "%~f0"
 """
         with open(bat_path, "w", encoding="utf-8") as f:

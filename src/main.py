@@ -1,4 +1,5 @@
 import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import sys
 import json
 import threading
@@ -6,6 +7,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, Menu, colorchooser
 import customtkinter as ctk
 from PIL import Image
+import pygame
 
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
@@ -102,6 +104,11 @@ class AutoToneApp(Tk):
         self.output_format = "WAV" # Định dạng mặc định
         self.two_stems_mode = False # Mặc định tách 4 stems
         self.username = "User_pussyGUY" # Tên mặc định
+        self.is_playing = False # Trạng thái phát nhạc
+        self.audio_duration = 0.0
+        self.playback_start_offset = 0.0
+        self.playback_file = None
+        self.is_dragging = False
         
         self.config_path = get_resource_path("config.json")
         self.load_config()
@@ -110,6 +117,14 @@ class AutoToneApp(Tk):
         
         # Tự động kiểm tra bản cập nhật
         threading.Thread(target=self.bg_check_update, daemon=True).start()
+        
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"Lỗi khởi tạo âm thanh: {e}")
+            
+        if "--updated" in sys.argv:
+            self.after(1000, lambda: messagebox.showinfo("Cập nhật thành công", f"Phần mềm đã được cập nhật thành công lên phiên bản {CURRENT_VERSION}!"))
 
     def bg_check_update(self):
         latest_version, download_url = check_for_updates()
@@ -266,8 +281,21 @@ class AutoToneApp(Tk):
         self.waveform_frame.grid_propagate(False) # Khóa chặt chiều cao
         self.waveform_frame.grid_remove() # Ẩn đi ban đầu
         
-        self.waveform_label = ctk.CTkLabel(self.waveform_frame, text="")
+        self.waveform_label = ctk.CTkLabel(self.waveform_frame, text="", cursor="hand2")
         self.waveform_label.pack(fill="both", expand=True, padx=10, pady=8)
+        
+        self.playhead = ctk.CTkFrame(self.waveform_label, width=2, fg_color="#ffcc00", cursor="sb_h_double_arrow")
+        self.playhead.place(relx=0.0, rely=0.0, relheight=1.0)
+        self.playhead.place_forget()
+        
+        # Bind events cho việc tua nhạc (Seek)
+        self.waveform_label.bind("<Button-1>", self._on_timeline_click)
+        self.waveform_label.bind("<B1-Motion>", self._on_timeline_drag)
+        self.waveform_label.bind("<ButtonRelease-1>", lambda e: self._seek_to_event(e, apply_play=True))
+        
+        self.playhead.bind("<Button-1>", self._on_timeline_click)
+        self.playhead.bind("<B1-Motion>", self._on_timeline_drag)
+        self.playhead.bind("<ButtonRelease-1>", lambda e: self._seek_to_event(e, apply_play=True))
 
         # ------------------- ACTION BUTTONS -------------------
         self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -291,7 +319,21 @@ class AutoToneApp(Tk):
         # Nút phụ — hàng dưới: Chọn file khác + Mở thư mục
         sub_btn_frame = ctk.CTkFrame(self.action_frame, fg_color="transparent")
         sub_btn_frame.grid(row=1, column=0, sticky="ew")
-        sub_btn_frame.grid_columnconfigure((0, 1), weight=1)
+        sub_btn_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        
+        self.btn_play = ctk.CTkButton(
+            sub_btn_frame,
+            text="▶  Nghe thử",
+            height=34,
+            corner_radius=8,
+            fg_color="#2a2a2a",
+            hover_color="#3a3a3a",
+            border_width=1,
+            border_color="#3a3a3a",
+            font=ctk.CTkFont(size=12),
+            command=self.toggle_playback
+        )
+        self.btn_play.grid(row=0, column=0, sticky="ew", padx=(0, 3))
         
         self.btn_change_file = ctk.CTkButton(
             sub_btn_frame,
@@ -305,7 +347,7 @@ class AutoToneApp(Tk):
             font=ctk.CTkFont(size=12),
             command=self.browse_file
         )
-        self.btn_change_file.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        self.btn_change_file.grid(row=0, column=1, sticky="ew", padx=(3, 3))
         
         self.btn_open_folder = ctk.CTkButton(
             sub_btn_frame,
@@ -321,7 +363,7 @@ class AutoToneApp(Tk):
             state="disabled",
             text_color_disabled="#555555"
         )
-        self.btn_open_folder.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        self.btn_open_folder.grid(row=0, column=2, sticky="ew", padx=(3, 0))
         
         # ------------------- PROGRESS -------------------
         self.progress_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -871,6 +913,9 @@ class AutoToneApp(Tk):
         self.btn_open_folder.configure(state="disabled", text_color_disabled="#555555")
         self.btn_separate.configure(state="normal")
         
+        if self.is_playing:
+            self.toggle_playback()
+            
         # Bắt đầu phân tích
         self.start_analysis()
 
@@ -953,14 +998,24 @@ class AutoToneApp(Tk):
         
         
         self._display_waveform(result["waveform"])
+        self.audio_duration = result.get("duration_secs", 0.0)
+        self.playback_file = result.get("playback_file", self.selected_file)
+        self.playback_start_offset = 0.0
+        self.playhead.place(relx=0.01923) # Vị trí bắt đầu của sóng âm sau margin
+        self.playhead.place_forget()
+        
         self.set_status("", is_loading=False)
         # Enable nút tách stem
         self.btn_separate.configure(state="normal")
         
     def _display_waveform(self, img_path):
         try:
+            self.waveform_label.update_idletasks()
+            target_width = self.waveform_label.winfo_width()
+            if target_width < 100:
+                target_width = 508
+                
             wf_img = Image.open(img_path)
-            target_width = 480
             ratio = target_width / wf_img.width
             target_height = min(int(wf_img.height * ratio), 140) # Khóa max height
             
@@ -977,7 +1032,11 @@ class AutoToneApp(Tk):
 
     def start_separation(self):
         if not self.selected_file:
+            messagebox.showwarning("Cảnh báo", "Vui lòng chọn một bài hát trước!")
             return
+            
+        if self.is_playing:
+            self.toggle_playback()
             
         out_dir = self.default_output_dir if self.default_output_dir else os.path.dirname(self.selected_file)
         self.set_status("Đang tách Stem (Demucs)...", is_loading=True)
@@ -1006,6 +1065,97 @@ class AutoToneApp(Tk):
         self.set_status("❌  Lỗi tách Stem", is_loading=False)
         self.btn_separate.configure(state="normal", text="🎧  Tách Nhạc cụ & Vocal")
         messagebox.showerror("Lỗi", f"Có lỗi xảy ra:\n{error_msg}")
+
+    def _on_timeline_click(self, event):
+        if not self.audio_duration or not self.selected_file:
+            return
+        self._seek_to_event(event)
+
+    def _on_timeline_drag(self, event):
+        if not self.audio_duration or not self.selected_file:
+            return
+        self.is_dragging = True
+        self._seek_to_event(event, apply_play=False)
+
+    def _seek_to_event(self, event, apply_play=True):
+        widget_width = self.waveform_label.winfo_width()
+        if widget_width <= 0: return
+        
+        # Sóng âm thực tế nằm từ 1.923% đến 98.077% do ax.margins(x=0.02)
+        start_relx = 0.01923
+        end_relx = 0.98077
+        span_relx = end_relx - start_relx
+        
+        raw_relx = event.x / widget_width
+        # Ràng buộc trong vùng sóng âm thực
+        clamped_relx = max(start_relx, min(end_relx, raw_relx))
+        
+        self.playhead.place(relx=clamped_relx)
+        
+        # Tính toán thời gian (0 -> duration tương ứng với start_relx -> end_relx)
+        progress = (clamped_relx - start_relx) / span_relx
+        target_time = progress * self.audio_duration
+        self.playback_start_offset = target_time
+        
+        if apply_play:
+            self.is_dragging = False
+            if self.is_playing:
+                pygame.mixer.music.play(start=target_time)
+                self.update_timeline()
+            elif getattr(pygame.mixer.music, 'get_busy', lambda: False)():
+                # Nếu đang tạm dừng mà người dùng tua, thì stop để khi ấn Play sẽ chạy từ điểm tua
+                pygame.mixer.music.stop()
+                
+    def update_timeline(self):
+        if not self.is_playing or self.is_dragging or self.audio_duration <= 0:
+            return
+            
+        try:
+            pos_ms = pygame.mixer.music.get_pos()
+            if pos_ms >= 0:
+                current_time = self.playback_start_offset + (pos_ms / 1000.0)
+                if current_time >= self.audio_duration:
+                    self.is_playing = False
+                    self.btn_play.configure(text="▶  Nghe thử", text_color="#dddddd")
+                    self.playback_start_offset = 0.0
+                    self.playhead.place(relx=0.01923)
+                    pygame.mixer.music.stop()
+                    return
+                
+                start_relx = 0.01923
+                end_relx = 0.98077
+                progress = current_time / self.audio_duration
+                relx = start_relx + progress * (end_relx - start_relx)
+                
+                self.playhead.place(relx=max(start_relx, min(end_relx, relx)))
+        except:
+            pass
+            
+        self.after(50, self.update_timeline)
+
+    def toggle_playback(self):
+        if not self.selected_file or not os.path.exists(self.selected_file):
+            return
+            
+        try:
+            if not self.is_playing:
+                # Bắt đầu phát (từ đầu hoặc từ điểm đã tạm dừng / tua)
+                target_file = self.playback_file if self.playback_file else self.selected_file
+                pygame.mixer.music.load(target_file)
+                pygame.mixer.music.play(start=self.playback_start_offset)
+                self.is_playing = True
+                self.btn_play.configure(text="⏸  Tạm dừng", text_color="#ffcc00")
+                self.update_timeline()
+            else:
+                # Đang phát -> Tạm dừng (lưu lại thời gian hiện tại)
+                pos_ms = pygame.mixer.music.get_pos()
+                if pos_ms >= 0:
+                    self.playback_start_offset += (pos_ms / 1000.0)
+                pygame.mixer.music.stop()
+                self.is_playing = False
+                self.btn_play.configure(text="▶  Tiếp tục", text_color="#dddddd")
+        except Exception as e:
+            messagebox.showerror("Lỗi Phát nhạc", f"Không thể phát file này:\n{e}")
 
 if __name__ == "__main__":
     import multiprocessing
