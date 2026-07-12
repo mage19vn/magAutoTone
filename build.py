@@ -82,6 +82,8 @@ def main():
         "--noconsole",           
         "--onefile",             
         "--name", "magAutoTone", 
+        "--icon", os.path.join("assets", "icon.ico"),
+        "--add-data", f"{os.path.join('assets', 'icon.ico')};assets",
         "--collect-data", "tkinterdnd2", 
         "--collect-data", "customtkinter",
         "--collect-data", "librosa",

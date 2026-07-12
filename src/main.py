@@ -22,18 +22,77 @@ from updater import check_for_updates, download_and_install_update, CURRENT_VERS
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
+# Đảm bảo Windows hiển thị icon ở Taskbar thay vì icon Python mặc định
+if os.name == 'nt':
+    import ctypes
+    try:
+        myappid = f"mage19vn.magAutoTone.{CURRENT_VERSION}"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.TkdndVersion = TkinterDnD._require(self)
+
+class ToolTip:
+    def __init__(self, widget, text_func):
+        self.widget = widget
+        self.text_func = text_func
+        self.tipwindow = None
+        self.id = None
+        self.widget.bind("<Enter>", self.enter, add="+")
+        self.widget.bind("<Leave>", self.leave, add="+")
+
+    def enter(self, event=None):
+        self.unschedule()
+        self.id = self.widget.after(400, self.showtip)
+
+    def leave(self, event=None):
+        self.unschedule()
+        self.hidetip()
+
+    def unschedule(self):
+        if self.id:
+            self.widget.after_cancel(self.id)
+            self.id = None
+
+    def showtip(self):
+        text = self.text_func() if callable(self.text_func) else self.text_func
+        if not text or text == "--" or "..." in text:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(1)
+        tw.wm_attributes("-topmost", True)
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        frame = ctk.CTkFrame(tw, fg_color="#2b2b2b", corner_radius=6, border_width=1, border_color="#555555")
+        frame.pack(fill="both", expand=True)
+        
+        label = ctk.CTkLabel(frame, text=text, text_color="#eeeeee", font=ctk.CTkFont(size=12), justify="left")
+        label.pack(padx=10, pady=6)
+
+    def hidetip(self):
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw:
+            tw.destroy()
 
 class AutoToneApp(Tk):
     def __init__(self):
         super().__init__()
 
         self.title(f"magAutoTone {CURRENT_VERSION}")
-        self.geometry("600x700")
-        self.minsize(600, 700)
+        self.geometry("580x660")
+        self.resizable(False, False)
+        
+        try:
+            self.iconbitmap(get_resource_path("assets/icon.ico"))
+        except Exception:
+            pass
 
         self.analyzer = AudioAnalyzer()
         self.separator = StemSeparator()
@@ -41,6 +100,7 @@ class AutoToneApp(Tk):
         self.current_theme_color = "#1f6aa5" # Default blue
         self.default_output_dir = "" # Mặc định rỗng -> lưu cùng file gốc
         self.output_format = "WAV" # Định dạng mặc định
+        self.two_stems_mode = False # Mặc định tách 4 stems
         self.username = "User_pussyGUY" # Tên mặc định
         
         self.config_path = get_resource_path("config.json")
@@ -86,6 +146,7 @@ class AutoToneApp(Tk):
                     self.current_theme_color = config.get("current_theme_color", self.current_theme_color)
                     self.default_output_dir = config.get("default_output_dir", self.default_output_dir)
                     self.output_format = config.get("output_format", self.output_format)
+                    self.two_stems_mode = config.get("two_stems_mode", self.two_stems_mode)
                     self.username = config.get("username", self.username)
             except Exception as e:
                 print(f"Lỗi đọc config: {e}")
@@ -95,6 +156,7 @@ class AutoToneApp(Tk):
             "current_theme_color": self.current_theme_color,
             "default_output_dir": self.default_output_dir,
             "output_format": self.output_format,
+            "two_stems_mode": self.two_stems_mode,
             "username": self.username
         }
         try:
@@ -105,81 +167,227 @@ class AutoToneApp(Tk):
 
     def build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        # Không dùng weight cho bất kỳ row nào — layout khóa chặt
 
         # ------------------- HEADER -------------------
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        header_frame.grid(row=0, column=0, pady=(30, 10), sticky="ew", padx=30)
+        header_frame.grid(row=0, column=0, pady=(15, 8), sticky="ew", padx=25)
         header_frame.grid_columnconfigure(0, weight=1)
         
-        title_label = ctk.CTkLabel(header_frame, text="MagAutoTone", font=ctk.CTkFont(family="Helvetica", size=32, weight="bold"))
-        title_label.grid(row=0, column=0, sticky="w")
+        # Title with subtle accent dot
+        title_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_frame.grid(row=0, column=0, sticky="w")
+        
+        accent_dot = ctk.CTkLabel(title_frame, text="●", font=ctk.CTkFont(size=14), text_color=self.current_theme_color)
+        accent_dot.pack(side="left", padx=(0, 8))
+        self.accent_dot = accent_dot
+        
+        title_label = ctk.CTkLabel(title_frame, text="MagAutoTone", font=ctk.CTkFont(family="Helvetica", size=28, weight="bold"))
+        title_label.pack(side="left")
+        
+        version_label = ctk.CTkLabel(title_frame, text=f"  {CURRENT_VERSION}", font=ctk.CTkFont(size=11), text_color="#666666")
+        version_label.pack(side="left", pady=(5, 0))
         
         # Header action frame for buttons
         header_actions = ctk.CTkFrame(header_frame, fg_color="transparent")
         header_actions.grid(row=0, column=1, sticky="e")
         
-        self.lbl_username = ctk.CTkLabel(header_actions, text=self.username, font=ctk.CTkFont(size=14, weight="bold"), text_color="#aaaaaa")
-        self.lbl_username.grid(row=0, column=0, padx=(0, 15))
+        self.lbl_username = ctk.CTkLabel(header_actions, text=self.username, font=ctk.CTkFont(size=13, weight="bold"), text_color="#777777")
+        self.lbl_username.grid(row=0, column=0, padx=(0, 12))
         
-        btn_help = ctk.CTkButton(header_actions, text="❓", width=40, height=40, corner_radius=20,
-                                 fg_color="transparent", hover_color="#333333", font=ctk.CTkFont(size=22),
+        btn_help = ctk.CTkButton(header_actions, text="❓", width=36, height=36, corner_radius=18,
+                                 fg_color="#2a2a2a", hover_color="#3a3a3a", font=ctk.CTkFont(size=18),
                                  command=self.open_help_window)
-        btn_help.grid(row=0, column=1, padx=(0, 10))
+        btn_help.grid(row=0, column=1, padx=(0, 6))
 
-        btn_settings = ctk.CTkButton(header_actions, text="⚙️", width=40, height=40, corner_radius=20,
-                                   fg_color="transparent", hover_color="#333333", font=ctk.CTkFont(size=22),
+        btn_settings = ctk.CTkButton(header_actions, text="⚙️", width=36, height=36, corner_radius=18,
+                                   fg_color="#2a2a2a", hover_color="#3a3a3a", font=ctk.CTkFont(size=18),
                                    command=self.open_settings)
         btn_settings.grid(row=0, column=2, padx=0)
 
+        # Separator line
+        sep = ctk.CTkFrame(self, height=1, fg_color="#2a2a2a")
+        sep.grid(row=1, column=0, sticky="ew", padx=15)
+
         # ------------------- DYNAMIC DROPZONE -------------------
-        self.dropzone = ctk.CTkFrame(self, corner_radius=15, fg_color="#2b2b2b", border_width=2, border_color="#3b3b3b")
-        # Trạng thái ban đầu: To khổng lồ ở giữa
-        self.dropzone.grid(row=1, column=0, rowspan=2, padx=40, pady=40, sticky="nsew")
+        self.dropzone = ctk.CTkFrame(self, corner_radius=12, fg_color="#1e1e1e", border_width=2, border_color="#333333")
+        # Trạng thái ban đầu: to, ở giữa, chiếm hết phần còn lại
+        self.dropzone.grid(row=2, column=0, rowspan=4, padx=25, pady=(15, 20), sticky="nsew")
+        self.grid_rowconfigure(4, weight=1) # Chỉ expand khi dropzone đang hiện to
         self.dropzone.grid_rowconfigure(0, weight=1)
         self.dropzone.grid_columnconfigure(0, weight=1)
         
-        self.lbl_filename = ctk.CTkLabel(self.dropzone, text="Kéo thả file âm thanh vào đây\nhoặc click để duyệt file", font=ctk.CTkFont(size=18), text_color="gray")
-        self.lbl_filename.grid(row=0, column=0)
+        # Inner content for dropzone
+        dropzone_inner = ctk.CTkFrame(self.dropzone, fg_color="transparent")
+        dropzone_inner.grid(row=0, column=0, padx=10, pady=10)
+        
+        self.drop_icon = ctk.CTkLabel(dropzone_inner, text="🎵", font=ctk.CTkFont(size=42))
+        self.drop_icon.pack(pady=(0, 10))
+        
+        self.lbl_filename = ctk.CTkLabel(dropzone_inner, text="Kéo thả file âm thanh vào đây", font=ctk.CTkFont(size=16, weight="bold"), text_color="#cccccc")
+        self.lbl_filename.pack(pady=(5, 5))
+        
+        self.lbl_hint = ctk.CTkLabel(dropzone_inner, text="hoặc click để duyệt  ·  MP3, WAV, FLAC, Video", font=ctk.CTkFont(size=12), text_color="#666666")
+        self.lbl_hint.pack(pady=(4, 0))
 
         self.dropzone.drop_target_register(DND_FILES)
         self.dropzone.dnd_bind('<<Drop>>', self.on_drop)
-        self.lbl_filename.bind("<Button-1>", lambda e: self.browse_file())
-        self.dropzone.bind("<Button-1>", lambda e: self.browse_file())
-
-        # ------------------- ANALYSIS RESULTS -------------------
-        self.res_frame = ctk.CTkFrame(self, fg_color="#1e1e1e", corner_radius=15, border_width=1, border_color="#333333")
-        # Khung kết quả bị ẩn lúc đầu
-        self.res_frame.grid(row=2, column=0, padx=30, pady=(10, 30), sticky="nsew")
-        self.res_frame.grid_columnconfigure((0, 1), weight=1)
-        self.res_frame.grid_rowconfigure(1, weight=1)
-        self.res_frame.grid_remove() # Ẩn đi
+        # Bind click cho toàn bộ các widget con trong dropzone
+        for widget in [self.dropzone, self.lbl_filename, self.lbl_hint, self.drop_icon, dropzone_inner]:
+            widget.bind("<Button-1>", lambda e: self.browse_file())
         
-        self.bpm_label = ctk.CTkLabel(self.res_frame, text="BPM\n--", font=ctk.CTkFont(size=40, weight="bold"), text_color=self.current_theme_color)
-        self.bpm_label.grid(row=0, column=0, pady=(30, 10))
+        # Hover effect cho dropzone
+        def dz_enter(e):
+            if not self.selected_file:
+                self.dropzone.configure(border_color="#555555", fg_color="#232323")
+        def dz_leave(e):
+            if not self.selected_file:
+                self.dropzone.configure(border_color="#333333", fg_color="#1e1e1e")
+        for widget in [self.dropzone, self.lbl_filename, self.lbl_hint, self.drop_icon, dropzone_inner]:
+            widget.bind("<Enter>", dz_enter)
+            widget.bind("<Leave>", dz_leave)
 
-        self.key_label = ctk.CTkLabel(self.res_frame, text="Key\n--", font=ctk.CTkFont(size=40, weight="bold"), text_color=self.current_theme_color)
-        self.key_label.grid(row=0, column=1, pady=(30, 10))
+        # ------------------- INFO CARDS (3 cột: BPM / Key / Duration) -------------------
+        self.info_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.info_frame.grid(row=3, column=0, padx=25, pady=(10, 0), sticky="ew")
+        self.info_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.info_frame.grid_remove() # Ẩn đi ban đầu
 
-        # Waveform
-        self.waveform_label = ctk.CTkLabel(self.res_frame, text="", height=200)
-        self.waveform_label.grid(row=1, column=0, columnspan=2, padx=20, pady=20, sticky="nsew")
+        # BPM Card
+        self.bpm_card = self._create_info_card(self.info_frame, 0, "♡", "BPM", "--")
+        # Key Card
+        self.key_card = self._create_info_card(self.info_frame, 1, "♪", "TONE", "--")
+        # Duration Card
+        self.duration_card = self._create_info_card(self.info_frame, 2, "◷", "THỜI LƯỢNG", "--")
+        
+        # ------------------- WAVEFORM -------------------
+        self.waveform_frame = ctk.CTkFrame(self, fg_color="#1a1a1a", corner_radius=10, border_width=1, border_color="#2a2a2a", height=160)
+        self.waveform_frame.grid(row=4, column=0, padx=25, pady=(8, 0), sticky="ew")
+        self.waveform_frame.grid_propagate(False) # Khóa chặt chiều cao
+        self.waveform_frame.grid_remove() # Ẩn đi ban đầu
+        
+        self.waveform_label = ctk.CTkLabel(self.waveform_frame, text="")
+        self.waveform_label.pack(fill="both", expand=True, padx=10, pady=8)
+
+        # ------------------- ACTION BUTTONS -------------------
+        self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.action_frame.grid(row=5, column=0, padx=25, pady=(10, 0), sticky="ew")
+        self.action_frame.grid_columnconfigure(0, weight=1)
+        self.action_frame.grid_remove() # Ẩn đi ban đầu
+
+        # Nút tách stem chính — to, gradient, nổi bật
+        self.btn_separate = ctk.CTkButton(
+            self.action_frame, 
+            text="🎧  Tách Nhạc cụ & Vocal", 
+            height=42, 
+            corner_radius=10,
+            fg_color=self.current_theme_color, 
+            hover_color=self._darken_color(self.current_theme_color, 0.8),
+            font=ctk.CTkFont(size=15, weight="bold"),
+            command=self.start_separation
+        )
+        self.btn_separate.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        
+        # Nút phụ — hàng dưới: Chọn file khác + Mở thư mục
+        sub_btn_frame = ctk.CTkFrame(self.action_frame, fg_color="transparent")
+        sub_btn_frame.grid(row=1, column=0, sticky="ew")
+        sub_btn_frame.grid_columnconfigure((0, 1), weight=1)
+        
+        self.btn_change_file = ctk.CTkButton(
+            sub_btn_frame,
+            text="🔄  Chọn file khác",
+            height=34,
+            corner_radius=8,
+            fg_color="#2a2a2a",
+            hover_color="#3a3a3a",
+            border_width=1,
+            border_color="#3a3a3a",
+            font=ctk.CTkFont(size=12),
+            command=self.browse_file
+        )
+        self.btn_change_file.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        
+        self.btn_open_folder = ctk.CTkButton(
+            sub_btn_frame,
+            text="📂  Mở thư mục đã lưu",
+            height=34,
+            corner_radius=8,
+            fg_color="#2a2a2a",
+            hover_color="#3a3a3a",
+            border_width=1,
+            border_color="#3a3a3a",
+            font=ctk.CTkFont(size=12),
+            command=self._open_output_folder,
+            state="disabled",
+            text_color_disabled="#555555"
+        )
+        self.btn_open_folder.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         
         # ------------------- PROGRESS -------------------
         self.progress_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.progress_frame.grid(row=3, column=0, padx=30, pady=(0, 20), sticky="ew")
+        self.progress_frame.grid(row=6, column=0, padx=25, pady=(8, 15), sticky="ew")
         
-        self.status_label = ctk.CTkLabel(self.progress_frame, text="", text_color="gray", font=ctk.CTkFont(slant="italic"))
+        self.status_label = ctk.CTkLabel(self.progress_frame, text="", text_color="#888888", font=ctk.CTkFont(size=12, slant="italic"))
         self.status_label.pack(pady=(0, 5))
         
-        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, height=4, progress_color=self.current_theme_color)
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, height=4, progress_color=self.current_theme_color, fg_color="#2a2a2a")
         self.progress_bar.pack(fill="x")
         self.progress_bar.set(0)
         self.progress_frame.grid_remove()
 
-        # Context Menu
+        # Context Menu (vẫn giữ làm phương án phụ)
         self.context_menu = Menu(self, tearoff=0, bg="#2b2b2b", fg="white", font=("Helvetica", 11), activebackground=self.current_theme_color)
         self.context_menu.add_command(label="🪄 Tách Stem (Demucs)", command=self.start_separation)
+
+        # Track output dir for "Mở thư mục"
+        self.last_output_dir = None
+
+    def _create_info_card(self, parent, col, icon, title, value):
+        """Tạo một info card nhỏ gọn."""
+        card = ctk.CTkFrame(parent, corner_radius=10, fg_color="#1e1e1e", border_width=1, border_color="#2a2a2a", height=78)
+        card.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 3, 0 if col == 2 else 3))
+        card.grid_propagate(False)
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_rowconfigure((0, 1, 2), weight=1)
+        
+        lbl_icon = ctk.CTkLabel(card, text=icon, font=ctk.CTkFont(size=13), text_color="#555555")
+        lbl_icon.grid(row=0, column=0, sticky="s", pady=(6, 0))
+        
+        lbl_value = ctk.CTkLabel(card, text=value, font=ctk.CTkFont(size=20, weight="bold"), text_color=self.current_theme_color)
+        lbl_value.grid(row=1, column=0)
+        
+        lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=9, weight="bold"), text_color="#666666")
+        lbl_title.grid(row=2, column=0, sticky="n", pady=(0, 6))
+        
+        # Hover effect
+        def on_enter(e): card.configure(border_color="#444444")
+        def on_leave(e): card.configure(border_color="#2a2a2a")
+        for w in [card, lbl_icon, lbl_value, lbl_title]:
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+            
+        card.tooltip_text = ""
+        ToolTip(card, lambda: card.tooltip_text)
+        
+        return {"card": card, "icon": lbl_icon, "value": lbl_value, "title": lbl_title}
+
+    def _darken_color(self, hexcode, factor=0.8):
+        """Làm tối một mã màu hex."""
+        hexcode = hexcode.lstrip('#')
+        if len(hexcode) != 6:
+            return "#1a5080"
+        r, g, b = int(hexcode[0:2], 16), int(hexcode[2:4], 16), int(hexcode[4:6], 16)
+        r, g, b = int(r * factor), int(g * factor), int(b * factor)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _open_output_folder(self):
+        """Mở thư mục chứa output trong File Explorer."""
+        if self.last_output_dir and os.path.isdir(self.last_output_dir):
+            os.startfile(self.last_output_dir)
+        else:
+            out_dir = self.default_output_dir if self.default_output_dir else (os.path.dirname(self.selected_file) if self.selected_file else "")
+            if out_dir and os.path.isdir(out_dir):
+                os.startfile(out_dir)
 
     def open_help_window(self):
         help_win = ctk.CTkToplevel(self)
@@ -237,12 +445,12 @@ class AutoToneApp(Tk):
             lbl_content.bind("<Enter>", on_enter)
         
         create_card(scroll_frame, "MỤC ĐÍCH", 
-                    "Phần mềm giúp bạn tự động nhận diện Tone (Scale) và Nhịp (BPM) của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).", 
+                    "Phần mềm giúp bạn tự động nhận diện Tone (Scale), Nhịp (BPM) và Thời lượng của bài hát, đồng thời cho phép tách riêng biệt các thành phần (Vocals, Drums, Bass, Other) thông qua Trí tuệ nhân tạo (AI).", 
                     "🎯")
                     
         create_card(scroll_frame, "HƯỚNG DẪN NHANH", 
                     "• Ở màn hình chính, hãy Kéo & Thả một file âm thanh (hoặc Click vào khung) để duyệt tìm file.\n"
-                    "• Ngay sau đó, AI sẽ tự động phân tích BPM và Tone cho bài hát.\n"
+                    "• Ngay sau đó, AI sẽ tự động phân tích BPM, Tone và Thời lượng. Bạn có thể di chuột vào từng thẻ để xem thông tin chi tiết (ví dụ: các nốt nhạc chính của Tone).\n"
                     "• Để tách nhạc cụ, nhấn vào nút '🎧 Tách Nhạc cụ & Vocal'. Quá trình xử lý AI sẽ mất từ 1 đến vài phút tùy cấu hình máy của bạn.\n"
                     "• Bấm 'Mở thư mục' để lấy các file âm thanh đã được tách rời.", 
                     "⚡")
@@ -299,20 +507,27 @@ class AutoToneApp(Tk):
                                       hover_color="#3d1f25", command=lambda: self._reset_setting_dir(settings_win))
         btn_reset_dir.grid(row=1, column=2, padx=(0, 20), pady=(0, 20))
 
-        # --- Card 2: Định dạng đầu ra ---
+        # --- Card 2: Định dạng & Chế độ ---
         card2 = ctk.CTkFrame(settings_win, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
         card2.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 15))
-        card2.grid_columnconfigure(0, weight=1)
+        card2.grid_columnconfigure((0, 1), weight=1)
         
-        lbl_fmt_title = ctk.CTkLabel(card2, text="🎵 Định dạng Audio", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
-        lbl_fmt_title.grid(row=0, column=0, sticky="w", padx=20, pady=(15, 5))
+        lbl_fmt_title = ctk.CTkLabel(card2, text="🎵 Định dạng & Chế độ", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_fmt_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(15, 5))
         
         format_var = ctk.StringVar(value=self.output_format)
         self.format_selector = ctk.CTkSegmentedButton(card2, values=["WAV", "MP3", "FLAC"], variable=format_var, corner_radius=19,
                                                  command=self._change_output_format, 
                                                  selected_color=self.current_theme_color, 
                                                  selected_hover_color=self.current_theme_color, height=38)
-        self.format_selector.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
+        self.format_selector.grid(row=1, column=0, sticky="ew", padx=(20, 10), pady=(0, 20))
+        
+        mode_var = ctk.StringVar(value="Nhạc & Vocal (2)" if self.two_stems_mode else "Đầy đủ (4)")
+        self.mode_selector = ctk.CTkSegmentedButton(card2, values=["Nhạc & Vocal (2)", "Đầy đủ (4)"], variable=mode_var, corner_radius=19,
+                                                 command=self._change_separation_mode, 
+                                                 selected_color=self.current_theme_color, 
+                                                 selected_hover_color=self.current_theme_color, height=38)
+        self.mode_selector.grid(row=1, column=1, sticky="ew", padx=(10, 20), pady=(0, 20))
 
         # --- Card 3: Màu chủ đạo ---
         card3 = ctk.CTkFrame(settings_win, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
@@ -371,6 +586,10 @@ class AutoToneApp(Tk):
 
     def _change_output_format(self, choice):
         self.output_format = choice
+        self.save_config()
+
+    def _change_separation_mode(self, choice):
+        self.two_stems_mode = choice == "Nhạc & Vocal (2)"
         self.save_config()
 
     def _browse_setting_dir(self, win):
@@ -575,10 +794,20 @@ class AutoToneApp(Tk):
 
     def change_theme_color(self, hexcode):
         self.current_theme_color = hexcode
-        self.bpm_label.configure(text_color=hexcode)
-        self.key_label.configure(text_color=hexcode)
+        
+        # Update info cards
+        self.bpm_card["value"].configure(text_color=hexcode)
+        self.key_card["value"].configure(text_color=hexcode)
+        self.duration_card["value"].configure(text_color=hexcode)
+        
+        # Update accent dot, progress bar, context menu
+        self.accent_dot.configure(text_color=hexcode)
         self.progress_bar.configure(progress_color=hexcode)
         self.context_menu.configure(activebackground=hexcode)
+        
+        # Update action buttons
+        self.btn_separate.configure(fg_color=hexcode, hover_color=self._darken_color(hexcode, 0.8))
+        
         self.save_config()
 
         try:
@@ -624,13 +853,29 @@ class AutoToneApp(Tk):
         self.selected_file = file_path
         filename = os.path.basename(file_path)
         
-        # 1. Thu nhỏ Dropzone lên trên
-        self.dropzone.grid(row=1, column=0, rowspan=1, padx=30, pady=10, sticky="ew")
-        self.dropzone.configure(border_color=self.current_theme_color)
-        self.lbl_filename.configure(text=f"🎵 {filename}", font=ctk.CTkFont(size=14, weight="bold"), text_color="white")
+        # 1. Tắt weight expand (dropzone không còn chiếm hết)
+        self.grid_rowconfigure(4, weight=0)
         
-        # 2. Hiển thị khung kết quả
-        self.res_frame.grid()
+        # 2. Thu nhỏ Dropzone thành thanh ngang nhỏ ở trên
+        self.dropzone.grid(row=2, column=0, rowspan=1, padx=25, pady=(15, 0), sticky="ew")
+        self.dropzone.configure(border_color=self.current_theme_color, fg_color="#1e1e1e")
+        # Để dropzone tự động co giãn theo nội dung bên trong, tránh cắt chữ
+        if hasattr(self.dropzone, 'grid_propagate'):
+            self.dropzone.grid_propagate(True)
+        
+        self.drop_icon.pack_forget()
+        self.lbl_hint.pack_forget()
+        self.lbl_filename.configure(text=f"🎵  {filename}", font=ctk.CTkFont(size=13, weight="bold"), text_color="#eeeeee")
+        self.lbl_filename.pack(pady=0) # Padding trong đã được xử lý bởi dropzone_inner
+        
+        # 3. Hiển thị info cards, waveform, và action buttons
+        self.info_frame.grid()
+        self.waveform_frame.grid()
+        self.action_frame.grid()
+        
+        # 4. Reset "Mở thư mục" button khi chọn file mới
+        self.btn_open_folder.configure(state="disabled", text_color_disabled="#555555")
+        self.btn_separate.configure(state="normal")
         
         # Bắt đầu phân tích
         self.start_analysis()
@@ -640,8 +885,11 @@ class AutoToneApp(Tk):
 
     def _set_status_ui(self, message, is_loading):
         if message:
+            # Cắt ngắn log nếu quá dài để không làm hụt giao diện chiều ngang
+            display_msg = message if len(message) < 80 else message[:77] + "..."
+            
             self.progress_frame.grid()
-            self.status_label.configure(text=message)
+            self.status_label.configure(text=display_msg)
             if is_loading:
                 self.progress_bar.configure(mode="indeterminate")
                 self.progress_bar.start()
@@ -655,9 +903,15 @@ class AutoToneApp(Tk):
 
     def start_analysis(self):
         self.set_status("Đang phân tích BPM & Key...", is_loading=True)
-        self.bpm_label.configure(text="BPM\n...", text_color="gray")
-        self.key_label.configure(text="Key\n...", text_color="gray")
-        self.waveform_label.configure(image=None, text="")
+        # Reset info cards to loading state
+        self.bpm_card["value"].configure(text="...", text_color="#555555")
+        self.key_card["value"].configure(text="...", text_color="#555555")
+        self.duration_card["value"].configure(text="...", text_color="#555555")
+        empty_img = ctk.CTkImage(Image.new("RGBA", (1, 1), (0,0,0,0)), size=(1, 1))
+        self.waveform_label.configure(image=empty_img, text="")
+        self.waveform_label.image = empty_img
+        # Disable tách stem khi đang phân tích
+        self.btn_separate.configure(state="disabled")
         
         thread = threading.Thread(target=self._analysis_worker, daemon=True)
         thread.start()
@@ -668,19 +922,53 @@ class AutoToneApp(Tk):
             self.after(0, self._update_analysis_ui, result)
         except Exception as e:
             self.set_status(f"Lỗi: {e}", is_loading=False)
+            self.after(0, lambda: self.btn_separate.configure(state="normal"))
+
+    def _get_scale_notes(self, key, scale):
+        notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        try:
+            start_idx = notes.index(key)
+        except:
+            return ""
+        if scale == "Major":
+            intervals = [0, 2, 4, 5, 7, 9, 11]
+        else:
+            intervals = [0, 2, 3, 5, 7, 8, 10]
+        scale_notes = [notes[(start_idx + i) % 12] for i in intervals]
+        return ", ".join(scale_notes)
 
     def _update_analysis_ui(self, result):
-        self.bpm_label.configure(text=f"BPM\n{result['bpm']}", text_color=self.current_theme_color)
-        self.key_label.configure(text=f"Key\n{result['key']}", text_color=self.current_theme_color)
+        # Update info cards with results
+        self.bpm_card["value"].configure(text=str(result['bpm']), text_color=self.current_theme_color)
+        self.key_card["value"].configure(text=result['key'], text_color=self.current_theme_color)
+        self.duration_card["value"].configure(text=result.get('duration', '--'), text_color=self.current_theme_color)
+        
+        # Tooltips data
+        self.bpm_card["card"].tooltip_text = f"Tempo bài hát là {result['bpm']} nhịp/phút."
+        
+        k, s = result['key'].split(' ') if ' ' in result['key'] else (result['key'], "Major")
+        notes_str = self._get_scale_notes(k, s)
+        self.key_card["card"].tooltip_text = f"Bài hát có Key {result['key']} với các note chính {notes_str}."
+        
+        duration_str = result.get('duration', '--')
+        if ":" in duration_str:
+            m, sec = duration_str.split(":")
+            self.duration_card["card"].tooltip_text = f"Độ dài {m} phút {sec} giây"
+        else:
+            self.duration_card["card"].tooltip_text = f"Độ dài {duration_str}"
+        
+        
         self._display_waveform(result["waveform"])
         self.set_status("", is_loading=False)
+        # Enable nút tách stem
+        self.btn_separate.configure(state="normal")
         
     def _display_waveform(self, img_path):
         try:
             wf_img = Image.open(img_path)
-            target_width = 500
+            target_width = 480
             ratio = target_width / wf_img.width
-            target_height = int(wf_img.height * ratio)
+            target_height = min(int(wf_img.height * ratio), 140) # Khóa max height
             
             ctk_img = ctk.CTkImage(light_image=wf_img, dark_image=wf_img, size=(target_width, target_height))
             self.waveform_label.configure(image=ctk_img, text="")
@@ -699,22 +987,30 @@ class AutoToneApp(Tk):
             
         out_dir = self.default_output_dir if self.default_output_dir else os.path.dirname(self.selected_file)
         self.set_status("Đang tách Stem (Demucs)...", is_loading=True)
+        # Disable nút khi đang tách
+        self.btn_separate.configure(state="disabled", text="⏳  Đang tách...")
 
         self.separator.separate(
             self.selected_file,
             out_dir,
             output_format=self.output_format,
+            two_stems=self.two_stems_mode,
             progress_callback=lambda m: self.set_status(f"Tách nhạc: {m}", is_loading=True),
             done_callback=lambda d: self.after(0, self._separation_done, d),
             error_callback=lambda e: self.after(0, self._separation_error, e)
         )
 
     def _separation_done(self, out_dir):
-        self.set_status(f"Tách hoàn tất! Lên: {out_dir}", is_loading=False)
+        self.last_output_dir = out_dir
+        self.set_status("✅  Tách hoàn tất!", is_loading=False)
+        # Restore nút tách và enable nút mở thư mục
+        self.btn_separate.configure(state="normal", text="🎧  Tách Nhạc cụ & Vocal")
+        self.btn_open_folder.configure(state="normal")
         messagebox.showinfo("Thành công", f"Các Stems đã được lưu vào:\n{out_dir}")
 
     def _separation_error(self, error_msg):
-        self.set_status("Lỗi tách Stem", is_loading=False)
+        self.set_status("❌  Lỗi tách Stem", is_loading=False)
+        self.btn_separate.configure(state="normal", text="🎧  Tách Nhạc cụ & Vocal")
         messagebox.showerror("Lỗi", f"Có lỗi xảy ra:\n{error_msg}")
 
 if __name__ == "__main__":

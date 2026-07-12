@@ -14,6 +14,7 @@ dist/
 # Environments
 .env
 .venv
+config.json
 env/
 venv/
 

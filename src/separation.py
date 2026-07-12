@@ -8,7 +8,7 @@ class StemSeparator:
         self.process = None
         self.is_running = False
 
-    def separate(self, file_path: str, output_dir: str, output_format: str = "wav", progress_callback=None, done_callback=None, error_callback=None):
+    def separate(self, file_path: str, output_dir: str, output_format: str = "wav", two_stems: bool = False, progress_callback=None, done_callback=None, error_callback=None):
         """
         Chạy Demucs trên một luồng riêng bằng subprocess để tách stem.
         """
@@ -20,11 +20,21 @@ class StemSeparator:
                 
                 # Gọi lệnh demucs thông qua python -m demucs
                 # htdemucs là model mặc định có tốc độ và chất lượng tốt
+                
+                # Tối ưu tốc độ: sử dụng multiprocessing của CPU
+                import multiprocessing
+                cpu_count = max(1, multiprocessing.cpu_count() - 2) # Giữ lại 2 core cho hệ thống
+                
                 cmd = [
                     sys.executable, "-m", "demucs.separate",
                     "-n", "htdemucs",
+                    "-j", str(cpu_count), # Tối ưu hóa đa luồng (multi-core)
+                    "--int24", # Tối ưu hóa I/O, file nhẹ hơn so với float32
                     "-o", output_dir,
                 ]
+                
+                if two_stems:
+                    cmd.extend(["--two-stems", "vocals"])
                 
                 if output_format.lower() == "mp3":
                     cmd.append("--mp3")

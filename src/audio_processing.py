@@ -52,6 +52,12 @@ class AudioAnalyzer:
             self.last_y = y
             self.last_sr = sr
             
+            # Tính thời lượng
+            duration_secs = len(y) / sr
+            minutes = int(duration_secs // 60)
+            seconds = int(duration_secs % 60)
+            duration_str = f"{minutes}:{seconds:02d}"
+            
             if progress_callback:
                 progress_callback("Đang tính toán BPM (Nhịp điệu)...")
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
@@ -72,6 +78,7 @@ class AudioAnalyzer:
             return {
                 "bpm": round(float(bpm), 2),
                 "key": musical_key,
+                "duration": duration_str,
                 "waveform": waveform_img
             }
 
