@@ -2,6 +2,7 @@ import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import sys
 import json
+from locales import TRANSLATIONS
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, Menu, colorchooser
@@ -107,6 +108,7 @@ class AutoToneApp(Tk):
         self.mp3_bitrate = 320 # Bitrate mặc định cho MP3 (kbps)
         self.use_gpu = False # Mặc định dùng CPU
         self.auto_subfolder = False # Mặc định không tạo thư mục con
+        self.language = "vi" # Ngôn ngữ mặc định
         self.is_playing = False # Trạng thái phát nhạc
         self.audio_duration = 0.0
         self.playback_start_offset = 0.0
@@ -148,13 +150,17 @@ class AutoToneApp(Tk):
             if latest_version and download_url:
                 self.after(0, lambda: self.prompt_update(latest_version, download_url))
             else:
-                self.after(0, lambda: messagebox.showinfo("Cập nhật", "Bạn đang sử dụng phiên bản mới nhất!"))
+                self.after(0, lambda: messagebox.showinfo(self._t("update_title"), self._t("up_to_date")))
         threading.Thread(target=_check, daemon=True).start()
 
     def update_callback(self, msg):
         self.after(0, lambda: self.set_status(msg, "Đang tải" in msg or "cài đặt" in msg))
-        if "Lỗi" in msg:
+        if self._t("msg_error") in msg:
             self.after(0, lambda: messagebox.showerror("Lỗi Cập nhật", msg))
+
+    def _t(self, key):
+        lang = getattr(self, "language", "vi")
+        return TRANSLATIONS.get(lang, TRANSLATIONS["vi"]).get(key, key)
 
     def load_config(self):
         if os.path.exists(self.config_path):
@@ -169,6 +175,7 @@ class AutoToneApp(Tk):
                     self.mp3_bitrate = config.get("mp3_bitrate", self.mp3_bitrate)
                     self.use_gpu = config.get("use_gpu", self.use_gpu)
                     self.auto_subfolder = config.get("auto_subfolder", self.auto_subfolder)
+                    self.language = config.get("language", "vi")
             except Exception as e:
                 print(f"Lỗi đọc config: {e}")
 
@@ -181,7 +188,8 @@ class AutoToneApp(Tk):
             "username": self.username,
             "mp3_bitrate": self.mp3_bitrate,
             "use_gpu": self.use_gpu,
-            "auto_subfolder": self.auto_subfolder
+            "auto_subfolder": self.auto_subfolder,
+            "language": getattr(self, "language", "vi")
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
@@ -253,10 +261,10 @@ class AutoToneApp(Tk):
         self.pacman_arc = self.pacman_canvas.create_arc(5, 5, 145, 145, start=30, extent=300, fill="#ffcc00", outline="")
         # Không pack pacman_canvas ngay từ đầu, chỉ hiện khi drag
         
-        self.lbl_filename = ctk.CTkLabel(dropzone_inner, text="Kéo thả file âm thanh vào đây", font=ctk.CTkFont(size=16, weight="bold"), text_color="#cccccc")
+        self.lbl_filename = ctk.CTkLabel(dropzone_inner, text=self._t("drop_wait"), font=ctk.CTkFont(size=16, weight="bold"), text_color="#cccccc")
         self.lbl_filename.pack(pady=(5, 5))
         
-        self.lbl_hint = ctk.CTkLabel(dropzone_inner, text="hoặc click để duyệt  ·  MP3, WAV, FLAC, Video", font=ctk.CTkFont(size=12), text_color="#666666")
+        self.lbl_hint = ctk.CTkLabel(dropzone_inner, text=self._t("drop_hint"), font=ctk.CTkFont(size=12), text_color="#666666")
         self.lbl_hint.pack(pady=(4, 0))
 
         self.dropzone.drop_target_register(DND_FILES)
@@ -276,7 +284,7 @@ class AutoToneApp(Tk):
             self.pacman_canvas.pack_forget()
             if not getattr(self, 'selected_file', None):
                 self.drop_icon.pack(pady=(0, 10))
-                self.lbl_filename.configure(text="Kéo thả file âm thanh vào đây")
+                self.lbl_filename.configure(text=self._t("drop_wait"))
                 self.dropzone.configure(border_color="#333333", border_width=2, fg_color="#1e1e1e")
             else:
                 self.lbl_filename.configure(text=os.path.basename(self.selected_file))
@@ -311,7 +319,7 @@ class AutoToneApp(Tk):
         # Key Card
         self.key_card = self._create_info_card(self.info_frame, 1, "♪", "TONE", "--")
         # Duration Card
-        self.duration_card = self._create_info_card(self.info_frame, 2, "◷", "THỜI LƯỢNG", "--")
+        self.duration_card = self._create_info_card(self.info_frame, 2, "◷", self._t("duration"), "--")
         
         # ------------------- WAVEFORM -------------------
         self.waveform_frame = ctk.CTkFrame(self, fg_color="#1a1a1a", corner_radius=10, border_width=1, border_color="#2a2a2a", height=160)
@@ -387,7 +395,7 @@ class AutoToneApp(Tk):
         
         self.btn_mixer = ctk.CTkButton(
             sub_btn_frame,
-            text="🎛️ Trộn âm",
+            text=self._t("mix_btn"),
             height=34,
             corner_radius=8,
             fg_color="#2a2a2a",
@@ -584,20 +592,20 @@ class AutoToneApp(Tk):
         card1.grid(row=1, column=0, sticky="ew", padx=30, pady=(0, 15))
         card1.grid_columnconfigure(0, weight=1)
         
-        lbl_dir_title = ctk.CTkLabel(card1, text="📁 Thư mục xuất tệp", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_dir_title = ctk.CTkLabel(card1, text=self._t("output_dir"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_dir_title.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(15, 5))
         
         self.lbl_outdir = ctk.CTkLabel(card1, 
-                                       text=self.default_output_dir if self.default_output_dir else "Mặc định: Cùng thư mục file gốc", 
+                                       text=self.default_output_dir if self.default_output_dir else self._t("default_dir"), 
                                        height=38, fg_color="#1f1f1f", corner_radius=6, anchor="w", padx=15, text_color="gray")
         self.lbl_outdir.grid(row=1, column=0, sticky="ew", padx=(20, 10), pady=(0, 20))
             
-        self.btn_browse_dir = ctk.CTkButton(card1, text="Thay đổi", width=80, height=38, corner_radius=19,
+        self.btn_browse_dir = ctk.CTkButton(card1, text=self._t("btn_browse"), width=80, height=38, corner_radius=19,
                                        fg_color=self.current_theme_color, hover_color=self.current_theme_color, 
                                        command=lambda: self._browse_setting_dir(settings_win))
         self.btn_browse_dir.grid(row=1, column=1, padx=(0, 5), pady=(0, 20))
         
-        btn_reset_dir = ctk.CTkButton(card1, text="Reset", width=60, height=38, corner_radius=19,
+        btn_reset_dir = ctk.CTkButton(card1, text=self._t("btn_reset"), width=60, height=38, corner_radius=19,
                                       fg_color="transparent", border_width=1, border_color="#e83151", text_color="#e83151", 
                                       hover_color="#3d1f25", command=lambda: self._reset_setting_dir(settings_win))
         btn_reset_dir.grid(row=1, column=2, padx=(0, 20), pady=(0, 20))
@@ -607,7 +615,7 @@ class AutoToneApp(Tk):
         card2.grid(row=2, column=0, sticky="ew", padx=30, pady=(0, 15))
         card2.grid_columnconfigure(0, weight=1)
         
-        lbl_fmt_title = ctk.CTkLabel(card2, text="🎵 Định dạng", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_fmt_title = ctk.CTkLabel(card2, text=self._t("format"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_fmt_title.grid(row=0, column=0, sticky="w", padx=20, pady=(15, 5))
         
         format_var = ctk.StringVar(value=self.output_format)
@@ -617,11 +625,11 @@ class AutoToneApp(Tk):
                                                  selected_hover_color=self.current_theme_color, height=38)
         self.format_selector.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
         
-        lbl_mode_title = ctk.CTkLabel(card2, text="🎛️ Chế độ", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_mode_title = ctk.CTkLabel(card2, text=self._t("mode"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_mode_title.grid(row=2, column=0, sticky="w", padx=20, pady=(5, 5))
         
-        mode_var = ctk.StringVar(value="Nhạc & Vocal (2)" if self.two_stems_mode else "Đầy đủ (4)")
-        self.mode_selector = ctk.CTkSegmentedButton(card2, values=["Nhạc & Vocal (2)", "Đầy đủ (4)"], variable=mode_var, corner_radius=19,
+        mode_var = ctk.StringVar(value=self._t("mode_2") if self.two_stems_mode else self._t("mode_4"))
+        self.mode_selector = ctk.CTkSegmentedButton(card2, values=[self._t("mode_2"), self._t("mode_4")], variable=mode_var, corner_radius=19,
                                                  command=self._change_separation_mode, 
                                                  selected_color=self.current_theme_color, 
                                                  selected_hover_color=self.current_theme_color, height=38)
@@ -632,7 +640,7 @@ class AutoToneApp(Tk):
         card3.grid(row=3, column=0, sticky="ew", padx=30, pady=(0, 15))
         card3.grid_columnconfigure(0, weight=1)
         
-        lbl_color_title = ctk.CTkLabel(card3, text="🎨 Màu chủ đạo", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_color_title = ctk.CTkLabel(card3, text=self._t("color"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_color_title.grid(row=0, column=0, sticky="w", padx=20, pady=(15, 5))
         color_frame = ctk.CTkFrame(card3, fg_color="transparent")
         color_frame.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
@@ -650,7 +658,7 @@ class AutoToneApp(Tk):
                                                border_width=2, border_color="#ffffff", state="disabled")
         self.btn_current_color.grid(row=0, column=len(preset_colors), padx=(10, 15))
         
-        self.btn_custom_color = ctk.CTkButton(color_frame, text="🌈 Khác", width=70, height=32, corner_radius=16,
+        self.btn_custom_color = ctk.CTkButton(color_frame, text=self._t("color_custom"), width=70, height=32, corner_radius=16,
                                               fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333", cursor="hand2",
                                               command=self.open_color_picker, font=ctk.CTkFont(size=12, weight="bold"))
         self.btn_custom_color.grid(row=0, column=len(preset_colors)+1, padx=(5, 0))
@@ -660,13 +668,13 @@ class AutoToneApp(Tk):
         card4.grid(row=4, column=0, sticky="ew", padx=30, pady=(0, 15))
         card4.grid_columnconfigure((0, 1), weight=1)
         
-        lbl_user_title = ctk.CTkLabel(card4, text="👤 Người dùng", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_user_title = ctk.CTkLabel(card4, text=self._t("user"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_user_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(15, 5))
         
         self.lbl_current_user = ctk.CTkLabel(card4, text=self.username, height=38, fg_color="#1f1f1f", corner_radius=6, anchor="w", padx=15, text_color="gray")
         self.lbl_current_user.grid(row=1, column=0, sticky="ew", padx=(20, 10), pady=(0, 20))
         
-        self.btn_change_name = ctk.CTkButton(card4, text="Đổi tên", width=80, height=38, corner_radius=19,
+        self.btn_change_name = ctk.CTkButton(card4, text=self._t("rename"), width=80, height=38, corner_radius=19,
                                              fg_color=self.current_theme_color, hover_color=self.current_theme_color,
                                              command=self.open_rename_popup)
         self.btn_change_name.grid(row=1, column=1, padx=(0, 20), pady=(0, 20))
@@ -676,11 +684,11 @@ class AutoToneApp(Tk):
         card5.grid(row=5, column=0, sticky="ew", padx=30, pady=(0, 15))
         card5.grid_columnconfigure(0, weight=1)
 
-        lbl_adv_title = ctk.CTkLabel(card5, text="⚙️ Tùy chỉnh nâng cao", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_adv_title = ctk.CTkLabel(card5, text=self._t("advanced"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
         lbl_adv_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(15, 10))
 
         # --- Bitrate MP3 ---
-        lbl_bitrate = ctk.CTkLabel(card5, text="Bitrate MP3", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_bitrate = ctk.CTkLabel(card5, text=self._t("bitrate"), font=ctk.CTkFont(size=13), text_color="#cccccc")
         lbl_bitrate.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 5))
 
         bitrate_var = ctk.StringVar(value=str(self.mp3_bitrate))
@@ -703,7 +711,7 @@ class AutoToneApp(Tk):
         gpu_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=(5, 5))
         gpu_frame.grid_columnconfigure(0, weight=1)
 
-        lbl_gpu = ctk.CTkLabel(gpu_frame, text="🚀 Tăng tốc GPU (CUDA)", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_gpu = ctk.CTkLabel(gpu_frame, text=self._t("gpu"), font=ctk.CTkFont(size=13), text_color="#cccccc")
         lbl_gpu.grid(row=0, column=0, sticky="w")
 
         self.gpu_switch = ctk.CTkSwitch(gpu_frame, text="", width=46, command=self._toggle_gpu,
@@ -717,7 +725,7 @@ class AutoToneApp(Tk):
         subfolder_frame.grid(row=4, column=0, sticky="ew", padx=20, pady=(5, 15))
         subfolder_frame.grid_columnconfigure(0, weight=1)
 
-        lbl_subfolder = ctk.CTkLabel(subfolder_frame, text="📁 Tự tạo thư mục theo tên bài hát", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_subfolder = ctk.CTkLabel(subfolder_frame, text=self._t("auto_subfolder"), font=ctk.CTkFont(size=13), text_color="#cccccc")
         lbl_subfolder.grid(row=0, column=0, sticky="w")
 
         self.subfolder_switch = ctk.CTkSwitch(subfolder_frame, text="", width=46, command=self._toggle_auto_subfolder,
@@ -726,15 +734,30 @@ class AutoToneApp(Tk):
         if self.auto_subfolder:
             self.subfolder_switch.select()
 
+        # --- Card 6: Ngôn ngữ ---
+        card6 = ctk.CTkFrame(scroll_frame, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
+        card6.grid(row=6, column=0, sticky="ew", padx=30, pady=(0, 15))
+        card6.grid_columnconfigure(0, weight=1)
+
+        lbl_lang_title = ctk.CTkLabel(card6, text=self._t("language"), font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_lang_title.grid(row=0, column=0, sticky="w", padx=20, pady=(15, 5))
+
+        lang_var = ctk.StringVar(value="Tiếng Việt" if self.language == "vi" else "English")
+        self.lang_selector = ctk.CTkSegmentedButton(card6, values=["Tiếng Việt", "English"], variable=lang_var, corner_radius=19,
+                                                    command=self._change_language,
+                                                    selected_color=self.current_theme_color,
+                                                    selected_hover_color=self.current_theme_color, height=38)
+        self.lang_selector.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
+
         # --- Cập nhật ---
         update_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-        update_frame.grid(row=6, column=0, sticky="ew", padx=30, pady=(10, 20))
+        update_frame.grid(row=7, column=0, sticky="ew", padx=30, pady=(10, 20))
         update_frame.grid_columnconfigure(0, weight=1)
         
         lbl_version = ctk.CTkLabel(update_frame, text=f"Phiên bản hiện tại: {CURRENT_VERSION}", text_color="gray", font=ctk.CTkFont(size=13))
         lbl_version.grid(row=0, column=0, sticky="w")
         
-        btn_update = ctk.CTkButton(update_frame, text="Kiểm tra bản cập nhật", width=140, height=32, corner_radius=16,
+        btn_update = ctk.CTkButton(update_frame, text=self._t("check_update"), width=140, height=32, corner_radius=16,
                                    fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333",
                                    command=self.manual_check_update)
         btn_update.grid(row=0, column=1, sticky="e")
@@ -766,8 +789,15 @@ class AutoToneApp(Tk):
         self.save_config()
 
     def _change_separation_mode(self, choice):
-        self.two_stems_mode = choice == "Nhạc & Vocal (2)"
+        self.two_stems_mode = choice == self._t("mode_2")
         self.save_config()
+
+    def _change_language(self, choice):
+        new_lang = "vi" if choice == "Tiếng Việt" else "en"
+        if new_lang != self.language:
+            self.language = new_lang
+            self.save_config()
+            messagebox.showinfo("Language", self._t("restart_req"))
 
     def _browse_setting_dir(self, win):
         dirname = filedialog.askdirectory(title="Chọn thư mục mặc định", parent=win)
@@ -778,9 +808,9 @@ class AutoToneApp(Tk):
             
     def _reset_setting_dir(self, win):
         self.default_output_dir = ""
-        self.lbl_outdir.configure(text="Mặc định: Cùng thư mục file gốc")
+        self.lbl_outdir.configure(text=self._t("default_dir"))
         self.save_config()
-        messagebox.showinfo("Reset", "Đã trả về thiết lập mặc định (Lưu cùng thư mục gốc).", parent=win)
+        messagebox.showinfo(self._t("btn_reset"), self._t("reset_done"), parent=win)
 
     def open_color_picker(self):
         picker = ctk.CTkToplevel(self)
@@ -908,7 +938,7 @@ class AutoToneApp(Tk):
         btn_frame = ctk.CTkFrame(picker, fg_color="transparent")
         btn_frame.pack(fill="x", padx=30, pady=(10, 25))
         
-        btn_cancel = ctk.CTkButton(btn_frame, text="Hủy", width=120, height=38, corner_radius=19,
+        btn_cancel = ctk.CTkButton(btn_frame, text=self._t("cancel"), width=120, height=38, corner_radius=19,
                                    fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333",
                                    command=picker.destroy)
         btn_cancel.pack(side="left", expand=True, padx=(0, 5))
@@ -927,25 +957,25 @@ class AutoToneApp(Tk):
         popup.grab_set()
 
         ctk.CTkLabel(popup, text="Cập nhật hồ sơ", font=ctk.CTkFont(size=22, weight="bold")).pack(pady=(25, 5))
-        ctk.CTkLabel(popup, text="Nhập tên mới và mã Key để xác thực", font=ctk.CTkFont(size=13), text_color="gray").pack(pady=(0, 20))
+        ctk.CTkLabel(popup, text=self._t("rename_prompt"), font=ctk.CTkFont(size=13), text_color="gray").pack(pady=(0, 20))
         
         frame = ctk.CTkFrame(popup, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=40)
         
-        entry_name = ctk.CTkEntry(frame, placeholder_text="Tên mới của bạn...", height=42, corner_radius=8, font=ctk.CTkFont(size=14))
+        entry_name = ctk.CTkEntry(frame, placeholder_text=self._t("new_name"), height=42, corner_radius=8, font=ctk.CTkFont(size=14))
         entry_name.pack(fill="x", pady=(0, 15))
         
-        entry_key = ctk.CTkEntry(frame, placeholder_text="Mã Key bảo mật", show="*", height=42, corner_radius=8, font=ctk.CTkFont(size=14))
+        entry_key = ctk.CTkEntry(frame, placeholder_text=self._t("security_key"), show="*", height=42, corner_radius=8, font=ctk.CTkFont(size=14))
         entry_key.pack(fill="x", pady=(0, 25))
         
         def on_confirm():
             new_name = entry_name.get().strip()
             key = entry_key.get().strip()
             if not new_name:
-                messagebox.showerror("Lỗi", "Tên không được để trống!", parent=popup)
+                messagebox.showerror(self._t("msg_error"), self._t("name_empty"), parent=popup)
                 return
             if key != "120408190808":
-                messagebox.showerror("Lỗi", "Mã Key không chính xác!", parent=popup)
+                messagebox.showerror(self._t("msg_error"), self._t("wrong_key"), parent=popup)
                 return
                 
             self.username = new_name
@@ -959,12 +989,12 @@ class AutoToneApp(Tk):
         btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
         btn_frame.pack(fill="x", padx=40, pady=(0, 30))
         
-        btn_cancel = ctk.CTkButton(btn_frame, text="Hủy", width=120, height=42, corner_radius=21,
+        btn_cancel = ctk.CTkButton(btn_frame, text=self._t("cancel"), width=120, height=42, corner_radius=21,
                                    fg_color="transparent", border_width=1, border_color="gray", hover_color="#333333",
                                    command=popup.destroy, font=ctk.CTkFont(size=14, weight="bold"))
         btn_cancel.pack(side="left", expand=True, padx=(0, 5))
         
-        btn_confirm = ctk.CTkButton(btn_frame, text="Xác nhận", width=120, height=42, corner_radius=21,
+        btn_confirm = ctk.CTkButton(btn_frame, text=self._t("confirm"), width=120, height=42, corner_radius=21,
                                     fg_color=self.current_theme_color, hover_color=self.current_theme_color,
                                     command=on_confirm, font=ctk.CTkFont(size=14, weight="bold"))
         btn_confirm.pack(side="right", expand=True, padx=(5, 0))
@@ -1040,7 +1070,7 @@ class AutoToneApp(Tk):
             # Pulse colors
             color_pulse = self.current_theme_color if self._drag_anim_step % 6 < 3 else "#ffcc00"
             
-            self.lbl_filename.configure(text=f"Đang đói! Đưa file đây{dots}")
+            self.lbl_filename.configure(text=f"{self._t('drop_hungry')}{dots}")
             self.dropzone.configure(border_color=color_pulse)
             
             self._drag_anim_step += 1
@@ -1067,10 +1097,10 @@ class AutoToneApp(Tk):
         
         # 2. Thu nhỏ Dropzone thành thanh ngang nhỏ ở trên
         self.dropzone.grid(row=2, column=0, rowspan=1, padx=25, pady=(15, 0), sticky="ew")
-        self.dropzone.configure(border_color=self.current_theme_color, fg_color="#1e1e1e")
-        # Để dropzone tự động co giãn theo nội dung bên trong, tránh cắt chữ
+        self.dropzone.configure(height=50, border_color=self.current_theme_color, fg_color="#1e1e1e")
+        # Khóa chiều cao thay vì để tự co giãn (nguyên nhân gây lỗi UI collapse)
         if hasattr(self.dropzone, 'grid_propagate'):
-            self.dropzone.grid_propagate(True)
+            self.dropzone.grid_propagate(False)
         
         self.drop_icon.pack_forget()
         self.pacman_canvas.pack_forget()
@@ -1115,7 +1145,7 @@ class AutoToneApp(Tk):
             self.progress_bar.stop()
 
     def start_analysis(self):
-        self.set_status("Đang phân tích BPM & Key...", is_loading=True)
+        self.set_status(self._t("analyzing"), is_loading=True)
         # Reset info cards to loading state
         self.bpm_card["value"].configure(text="...", text_color="#555555")
         self.key_card["value"].configure(text="...", text_color="#555555")
@@ -1253,7 +1283,7 @@ class AutoToneApp(Tk):
 
     def start_separation(self):
         if not self.selected_file:
-            messagebox.showwarning("Cảnh báo", "Vui lòng chọn một bài hát trước!")
+            messagebox.showwarning(self._t("msg_warn"), self._t("req_file"))
             return
             
         if self.is_playing:
@@ -1314,7 +1344,7 @@ class AutoToneApp(Tk):
     def _separation_error(self, error_msg):
         self.set_status("❌  Lỗi tách Stem", is_loading=False)
         self.btn_separate.configure(state="normal", text="🎧  Tách Nhạc cụ & Vocal")
-        messagebox.showerror("Lỗi", f"Có lỗi xảy ra:\n{error_msg}")
+        messagebox.showerror(self._t("msg_error"), f"Có lỗi xảy ra:\n{error_msg}")
 
     def _on_timeline_click(self, event):
         if not self.audio_duration or not self.selected_file:
@@ -1399,7 +1429,7 @@ class AutoToneApp(Tk):
 
     def open_mixer_window(self):
         if not getattr(self, 'last_separated_stems', None):
-            messagebox.showwarning("Cảnh báo", "Không tìm thấy file stems nào để trộn!")
+            messagebox.showwarning(self._t("msg_warn"), "Không tìm thấy file stems nào để trộn!")
             return
             
         mixer_win = ctk.CTkToplevel(self)
@@ -1483,7 +1513,7 @@ class AutoToneApp(Tk):
                                 command=lambda: self._toggle_preview_mix(mixer_win))
         self.btn_preview_mix.pack(side="left", padx=10)
             
-        btn_mix = ctk.CTkButton(action_frame, text="💾 Trộn & Lưu", height=40, font=ctk.CTkFont(size=14, weight="bold"),
+        btn_mix = ctk.CTkButton(action_frame, text=self._t("mix_save"), height=40, font=ctk.CTkFont(size=14, weight="bold"),
                                 fg_color=self.current_theme_color, hover_color=self._darken_color(self.current_theme_color))
         btn_mix.configure(command=lambda b=btn_mix: self._do_mix(mixer_win, b))
         btn_mix.pack(side="left", padx=10)
@@ -1531,7 +1561,7 @@ class AutoToneApp(Tk):
             self._stem_play_buttons[stem_name].configure(text="⏸", fg_color=self.current_theme_color)
             self.after(50, lambda: self._update_mixer_timeline(win))
         except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể phát stem:\n{e}")
+            messagebox.showerror(self._t("msg_error"), f"Không thể phát stem:\n{e}")
 
     def _debounce_preview_remix(self, win):
         if hasattr(self, '_remix_timer'):
@@ -1552,7 +1582,7 @@ class AutoToneApp(Tk):
         temp_path = os.path.join(tempfile.gettempdir(), f"mixer_preview_{uuid.uuid4().hex[:8]}.wav")
         
         # Show loading state
-        self.btn_preview_mix.configure(text="⏳ Đang tạo...", text_color="#dddddd")
+        self.btn_preview_mix.configure(text=self._t("saving"), text_color="#dddddd")
         self.update_idletasks()
         
         def run_remix():
@@ -1562,7 +1592,7 @@ class AutoToneApp(Tk):
                 pygame.mixer.music.play(start=current_time)
                 self.preview_start_offset = current_time
                 # Update button back to stop state
-                self.btn_preview_mix.configure(text="⏸ Dừng", text_color="#ffcc00")
+                self.btn_preview_mix.configure(text=self._t("stop_btn"), text_color="#ffcc00")
             except:
                 pass
         import threading
@@ -1615,7 +1645,7 @@ class AutoToneApp(Tk):
             return
             
         # Start playing
-        self.btn_preview_mix.configure(state="disabled", text="⏳ Đang tạo...")
+        self.btn_preview_mix.configure(state="disabled", text=self._t("saving"))
         self.update_idletasks()
         
         volumes = {stem: var.get() for stem, var in self.mixer_vars.items()}
@@ -1630,11 +1660,11 @@ class AutoToneApp(Tk):
                 pygame.mixer.music.play()
                 self.preview_start_offset = 0.0
                 self.is_preview_mixing = True
-                self.btn_preview_mix.configure(state="normal", text="⏸ Dừng", text_color="#ffcc00")
+                self.btn_preview_mix.configure(state="normal", text=self._t("stop_btn"), text_color="#ffcc00")
                 self.after(50, lambda: self._update_mixer_timeline(win))
             except Exception as e:
-                messagebox.showerror("Lỗi", f"Không thể tạo preview:\n{e}")
-                self.btn_preview_mix.configure(state="normal", text="▶ Nghe thử", text_color="#dddddd")
+                messagebox.showerror(self._t("msg_error"), f"Không thể tạo preview:\n{e}")
+                self.btn_preview_mix.configure(state="normal", text=self._t("play_btn"), text_color="#dddddd")
                 
         import threading
         threading.Thread(target=run_preview, daemon=True).start()
@@ -1653,7 +1683,7 @@ class AutoToneApp(Tk):
         for stem_name, var in self.mixer_vars.items():
             volumes[self.last_separated_stems[stem_name]] = var.get()
         
-        btn_mix.configure(state="disabled", text="⏳ Đang trộn...")
+        btn_mix.configure(state="disabled", text=self._t("mixing"))
         self.update_idletasks()
         
         def run_mix():
@@ -1662,8 +1692,8 @@ class AutoToneApp(Tk):
                 messagebox.showinfo("Thành công", f"Đã trộn và lưu thành công vào:\n{save_path}")
                 win.after(0, win.destroy)
             except Exception as e:
-                messagebox.showerror("Lỗi", f"Không thể trộn file:\n{e}")
-                btn_mix.configure(state="normal", text="💾 Trộn & Lưu")
+                messagebox.showerror(self._t("msg_error"), f"Không thể trộn file:\n{e}")
+                btn_mix.configure(state="normal", text=self._t("mix_save"))
         
         import threading
         threading.Thread(target=run_mix, daemon=True).start()

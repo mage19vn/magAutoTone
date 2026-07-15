@@ -1,0 +1,53 @@
+Bạn đang sử dụng phiên bản mới nhất!
+Chọn file
+Chọn thư mục mặc định
+Cảnh báo
+Cập nhật
+Cập nhật hồ sơ
+Hướng dẫn magAutoTone
+Hủy
+Không tìm thấy file stems nào để trộn!
+Kiểm tra bản cập nhật
+Kéo thả file âm thanh vào đây
+Lưu file âm thanh trộn
+Lỗi
+Mã Key bảo mật
+Mã Key không chính xác!
+Mặc định: Cùng thư mục file gốc
+Nhấn ▶ để nghe riêng từng stem  ·  Kéo thanh trượt để chỉnh âm lượng
+Nhập tên mới và mã Key để xác thực
+Thay đổi
+Thiếu thư viện
+Tên không được để trống!
+Tên mới của bạn...
+Tạo màu của riêng bạn
+Vui lòng chạy: pip install tkinterdnd2
+Vui lòng chọn một bài hát trước!
+Xác nhận
+hoặc click để duyệt  ·  MP3, WAV, FLAC, Video
+Áp dụng
+Đã trả về thiết lập mặc định (Lưu cùng thư mục gốc).
+Đổi tên
+⏳  Đang tách...
+⏳ Đang trộn...
+⏳ Đang tạo...
+⏸  Tạm dừng
+⏸ Dừng
+▶  Nghe thử
+▶  Tiếp tục
+▶ Nghe thử
+⚙️ Tùy chỉnh nâng cao
+🌈 Khác
+🎛️ Bộ trộn âm lượng
+🎛️ Chế độ
+🎛️ Trộn âm
+🎧  Tách Nhạc cụ & Vocal
+🎨 Màu chủ đạo
+🎵 Định dạng
+👤 Người dùng
+💾 Trộn & Lưu
+📁 Thư mục xuất tệp
+📁 Tự tạo thư mục theo tên bài hát
+📂  Mở thư mục
+🔄  Chọn file khác
+🚀 Tăng tốc GPU (CUDA)

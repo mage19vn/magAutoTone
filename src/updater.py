@@ -5,7 +5,7 @@ import urllib.request
 import subprocess
 import zipfile
 
-CURRENT_VERSION = "v1.0.12"
+CURRENT_VERSION = "v1.0.13"
 REPO_URL = "https://api.github.com/repos/mage19vn/magAutoTone/releases/latest"
 
 def check_for_updates():
@@ -55,6 +55,14 @@ def download_and_install_update(download_url, callback=None):
         with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
             
+        # Kiểm tra nếu trong zip chỉ có 1 thư mục gốc (thường thấy khi tải từ Github)
+        extracted_items = os.listdir(temp_dir)
+        source_dir = temp_dir
+        if len(extracted_items) == 1:
+            first_item = os.path.join(temp_dir, extracted_items[0])
+            if os.path.isdir(first_item):
+                source_dir = first_item
+                
         if callback:
             callback("Đang cài đặt...")
 
@@ -76,7 +84,7 @@ timeout /t 1 /nobreak >nul
 del "{exe_name}" 2>nul
 if exist "{exe_name}" goto waitloop
 
-xcopy /s /y /e /q "{temp_dir}\\*" .
+xcopy /s /y /e /q "{source_dir}\\*" .
 
 if not "{exe_name}"=="magAutoTone.exe" (
     if exist "magAutoTone.exe" (
