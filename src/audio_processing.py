@@ -184,3 +184,57 @@ class AudioAnalyzer:
             maxs = maxs / max_abs
             
         return list(zip(mins.tolist(), maxs.tolist()))
+
+    def mix_stems(self, stem_files: dict, output_path: str, progress_callback=None):
+        """
+        Trộn các file stem lại với nhau theo âm lượng tương ứng.
+        stem_files: dict có dạng {'đường_dẫn_file': volume_float, ...}
+        """
+        import soundfile as sf
+        import numpy as np
+
+        if progress_callback:
+            progress_callback("Đang chuẩn bị trộn âm...")
+
+        mixed_y = None
+        target_sr = None
+
+        for file_path, volume in stem_files.items():
+            if progress_callback:
+                progress_callback(f"Đang xử lý: {os.path.basename(file_path)}...")
+            
+            # Đọc audio
+            y, sr = sf.read(file_path)
+            
+            if target_sr is None:
+                target_sr = sr
+            elif sr != target_sr:
+                # Nếu sample rate khác nhau (hiếm khi xảy ra với output của Demucs)
+                import librosa
+                y = librosa.resample(y.T, orig_sr=sr, target_sr=target_sr).T
+
+            # Áp dụng volume
+            y_adj = y * volume
+
+            if mixed_y is None:
+                mixed_y = y_adj
+            else:
+                # Đảm bảo cùng độ dài
+                if len(y_adj) > len(mixed_y):
+                    y_adj = y_adj[:len(mixed_y)]
+                elif len(mixed_y) > len(y_adj):
+                    mixed_y = mixed_y[:len(y_adj)]
+                
+                mixed_y += y_adj
+
+        if progress_callback:
+            progress_callback("Đang lưu file kết quả...")
+
+        # Chống clip (vượt ngưỡng)
+        mixed_y = np.clip(mixed_y, -1.0, 1.0)
+        
+        # Ghi file
+        sf.write(output_path, mixed_y, target_sr)
+        
+        if progress_callback:
+            progress_callback("Hoàn tất trộn âm!")

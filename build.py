@@ -80,7 +80,7 @@ def main():
     command = [
         sys.executable, "-m", "PyInstaller",
         "--noconsole",           
-        "--onefile",             
+        "--onedir",              
         "--name", "magAutoTone", 
         "--icon", os.path.join("assets", "icon.ico"),
         "--add-data", f"{os.path.join('assets', 'icon.ico')};assets",
@@ -109,10 +109,14 @@ def main():
         # Nén thành file zip
         print("\nCompressing into ZIP file...")
         zip_path = os.path.join("dist", "magAutoTone.zip")
-        exe_path = os.path.join("dist", "magAutoTone.exe")
+        dir_path = os.path.join("dist", "magAutoTone")
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(exe_path, arcname="magAutoTone.exe")
+            for root, dirs, files in os.walk(dir_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, "dist")
+                    zipf.write(file_path, arcname=arcname)
             
         print("\n" + "="*50)
         print("BUILD & COMPRESS SUCCESSFUL! Check the 'dist' folder for magAutoTone.zip")
