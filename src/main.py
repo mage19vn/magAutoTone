@@ -104,6 +104,9 @@ class AutoToneApp(Tk):
         self.output_format = "WAV" # Định dạng mặc định
         self.two_stems_mode = False # Mặc định tách 4 stems
         self.username = "User_pussyGUY" # Tên mặc định
+        self.mp3_bitrate = 320 # Bitrate mặc định cho MP3 (kbps)
+        self.use_gpu = False # Mặc định dùng CPU
+        self.auto_subfolder = False # Mặc định không tạo thư mục con
         self.is_playing = False # Trạng thái phát nhạc
         self.audio_duration = 0.0
         self.playback_start_offset = 0.0
@@ -163,6 +166,9 @@ class AutoToneApp(Tk):
                     self.output_format = config.get("output_format", self.output_format)
                     self.two_stems_mode = config.get("two_stems_mode", self.two_stems_mode)
                     self.username = config.get("username", self.username)
+                    self.mp3_bitrate = config.get("mp3_bitrate", self.mp3_bitrate)
+                    self.use_gpu = config.get("use_gpu", self.use_gpu)
+                    self.auto_subfolder = config.get("auto_subfolder", self.auto_subfolder)
             except Exception as e:
                 print(f"Lỗi đọc config: {e}")
 
@@ -172,7 +178,10 @@ class AutoToneApp(Tk):
             "default_output_dir": self.default_output_dir,
             "output_format": self.output_format,
             "two_stems_mode": self.two_stems_mode,
-            "username": self.username
+            "username": self.username,
+            "mp3_bitrate": self.mp3_bitrate,
+            "use_gpu": self.use_gpu,
+            "auto_subfolder": self.auto_subfolder
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
@@ -239,6 +248,11 @@ class AutoToneApp(Tk):
         self.drop_icon = ctk.CTkLabel(dropzone_inner, text="🎵", font=ctk.CTkFont(size=42))
         self.drop_icon.pack(pady=(0, 10))
         
+        import tkinter as tk
+        self.pacman_canvas = tk.Canvas(dropzone_inner, width=150, height=150, bg="#2b2b2b", highlightthickness=0)
+        self.pacman_arc = self.pacman_canvas.create_arc(5, 5, 145, 145, start=30, extent=300, fill="#ffcc00", outline="")
+        # Không pack pacman_canvas ngay từ đầu, chỉ hiện khi drag
+        
         self.lbl_filename = ctk.CTkLabel(dropzone_inner, text="Kéo thả file âm thanh vào đây", font=ctk.CTkFont(size=16, weight="bold"), text_color="#cccccc")
         self.lbl_filename.pack(pady=(5, 5))
         
@@ -247,11 +261,35 @@ class AutoToneApp(Tk):
 
         self.dropzone.drop_target_register(DND_FILES)
         self.dropzone.dnd_bind('<<Drop>>', self.on_drop)
+        
+        # Hiệu ứng khi kéo file vào (DropEnter / DropLeave)
+        def on_drop_enter(event):
+            self._is_dragging_file = True
+            self._drag_anim_step = 0
+            self.drop_icon.pack_forget()
+            self.pacman_canvas.pack(pady=(0, 10))
+            self.dropzone.configure(border_width=4, fg_color="#2b2b2b")
+            self._animate_dropzone()
+            
+        def on_drop_leave(event=None):
+            self._is_dragging_file = False
+            self.pacman_canvas.pack_forget()
+            if not getattr(self, 'selected_file', None):
+                self.drop_icon.pack(pady=(0, 10))
+                self.lbl_filename.configure(text="Kéo thả file âm thanh vào đây")
+                self.dropzone.configure(border_color="#333333", border_width=2, fg_color="#1e1e1e")
+            else:
+                self.lbl_filename.configure(text=os.path.basename(self.selected_file))
+                self.dropzone.configure(border_color=self.current_theme_color, border_width=2)
+                
+        self.dropzone.dnd_bind('<<DropEnter>>', on_drop_enter)
+        self.dropzone.dnd_bind('<<DropLeave>>', on_drop_leave)
+        
         # Bind click cho toàn bộ các widget con trong dropzone
-        for widget in [self.dropzone, self.lbl_filename, self.lbl_hint, self.drop_icon, dropzone_inner]:
+        for widget in [self.dropzone, self.lbl_filename, self.lbl_hint, self.drop_icon, self.pacman_canvas, dropzone_inner]:
             widget.bind("<Button-1>", lambda e: self.browse_file())
         
-        # Hover effect cho dropzone
+        # Hover effect cho dropzone (chuột bình thường, không drag)
         def dz_enter(e):
             if not self.selected_file:
                 self.dropzone.configure(border_color="#555555", fg_color="#232323")
@@ -530,7 +568,9 @@ class AutoToneApp(Tk):
         settings_win.grid_columnconfigure(0, weight=1)
         settings_win.grid_rowconfigure(0, weight=1)
         
-        scroll_frame = ctk.CTkFrame(settings_win, fg_color="transparent")
+        scroll_frame = ctk.CTkScrollableFrame(settings_win, fg_color="transparent",
+                                               scrollbar_button_color="#3a3a3a",
+                                               scrollbar_button_hover_color="#555555")
         scroll_frame.grid(row=0, column=0, sticky="nsew")
         scroll_frame.grid_columnconfigure(0, weight=1)
         
@@ -631,9 +671,64 @@ class AutoToneApp(Tk):
                                              command=self.open_rename_popup)
         self.btn_change_name.grid(row=1, column=1, padx=(0, 20), pady=(0, 20))
 
+        # --- Card 5: Tùy chỉnh nâng cao ---
+        card5 = ctk.CTkFrame(scroll_frame, corner_radius=12, fg_color="#2b2b2b", border_width=1, border_color="#3b3b3b")
+        card5.grid(row=5, column=0, sticky="ew", padx=30, pady=(0, 15))
+        card5.grid_columnconfigure(0, weight=1)
+
+        lbl_adv_title = ctk.CTkLabel(card5, text="⚙️ Tùy chỉnh nâng cao", font=ctk.CTkFont(size=14, weight="bold"), text_color="#e0e0e0")
+        lbl_adv_title.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(15, 10))
+
+        # --- Bitrate MP3 ---
+        lbl_bitrate = ctk.CTkLabel(card5, text="Bitrate MP3", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_bitrate.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 5))
+
+        bitrate_var = ctk.StringVar(value=str(self.mp3_bitrate))
+        self.bitrate_selector = ctk.CTkSegmentedButton(card5, values=["128", "192", "320"], variable=bitrate_var, corner_radius=19,
+                                                 command=self._change_mp3_bitrate,
+                                                 selected_color=self.current_theme_color,
+                                                 selected_hover_color=self.current_theme_color, height=34)
+        self.bitrate_selector.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
+        
+        # Ẩn bitrate nếu không phải MP3
+        if self.output_format != "MP3":
+            lbl_bitrate.grid_remove()
+            self.bitrate_selector.grid_remove()
+        
+        # Lưu reference để ẩn/hiện từ _change_output_format
+        self._lbl_bitrate = lbl_bitrate
+
+        # --- GPU Acceleration ---
+        gpu_frame = ctk.CTkFrame(card5, fg_color="transparent")
+        gpu_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=(5, 5))
+        gpu_frame.grid_columnconfigure(0, weight=1)
+
+        lbl_gpu = ctk.CTkLabel(gpu_frame, text="🚀 Tăng tốc GPU (CUDA)", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_gpu.grid(row=0, column=0, sticky="w")
+
+        self.gpu_switch = ctk.CTkSwitch(gpu_frame, text="", width=46, command=self._toggle_gpu,
+                                        progress_color=self.current_theme_color)
+        self.gpu_switch.grid(row=0, column=1, sticky="e")
+        if self.use_gpu:
+            self.gpu_switch.select()
+
+        # --- Tự động tạo thư mục con ---
+        subfolder_frame = ctk.CTkFrame(card5, fg_color="transparent")
+        subfolder_frame.grid(row=4, column=0, sticky="ew", padx=20, pady=(5, 15))
+        subfolder_frame.grid_columnconfigure(0, weight=1)
+
+        lbl_subfolder = ctk.CTkLabel(subfolder_frame, text="📁 Tự tạo thư mục theo tên bài hát", font=ctk.CTkFont(size=13), text_color="#cccccc")
+        lbl_subfolder.grid(row=0, column=0, sticky="w")
+
+        self.subfolder_switch = ctk.CTkSwitch(subfolder_frame, text="", width=46, command=self._toggle_auto_subfolder,
+                                              progress_color=self.current_theme_color)
+        self.subfolder_switch.grid(row=0, column=1, sticky="e")
+        if self.auto_subfolder:
+            self.subfolder_switch.select()
+
         # --- Cập nhật ---
         update_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
-        update_frame.grid(row=5, column=0, sticky="ew", padx=30, pady=(10, 20))
+        update_frame.grid(row=6, column=0, sticky="ew", padx=30, pady=(10, 20))
         update_frame.grid_columnconfigure(0, weight=1)
         
         lbl_version = ctk.CTkLabel(update_frame, text=f"Phiên bản hiện tại: {CURRENT_VERSION}", text_color="gray", font=ctk.CTkFont(size=13))
@@ -646,6 +741,28 @@ class AutoToneApp(Tk):
 
     def _change_output_format(self, choice):
         self.output_format = choice
+        self.save_config()
+        # Ẩn/hiện Bitrate selector tùy theo định dạng
+        try:
+            if choice == "MP3":
+                self._lbl_bitrate.grid()
+                self.bitrate_selector.grid()
+            else:
+                self._lbl_bitrate.grid_remove()
+                self.bitrate_selector.grid_remove()
+        except Exception:
+            pass
+
+    def _change_mp3_bitrate(self, choice):
+        self.mp3_bitrate = int(choice)
+        self.save_config()
+
+    def _toggle_gpu(self):
+        self.use_gpu = self.gpu_switch.get() == 1
+        self.save_config()
+
+    def _toggle_auto_subfolder(self):
+        self.auto_subfolder = self.subfolder_switch.get() == 1
         self.save_config()
 
     def _change_separation_mode(self, choice):
@@ -881,6 +998,12 @@ class AutoToneApp(Tk):
                 self.mode_selector.configure(selected_color=hexcode, selected_hover_color=hexcode)
             if hasattr(self, 'btn_change_name') and self.btn_change_name.winfo_exists():
                 self.btn_change_name.configure(fg_color=hexcode, hover_color=hexcode)
+            if hasattr(self, 'bitrate_selector') and self.bitrate_selector.winfo_exists():
+                self.bitrate_selector.configure(selected_color=hexcode, selected_hover_color=hexcode)
+            if hasattr(self, 'gpu_switch') and self.gpu_switch.winfo_exists():
+                self.gpu_switch.configure(progress_color=hexcode)
+            if hasattr(self, 'subfolder_switch') and self.subfolder_switch.winfo_exists():
+                self.subfolder_switch.configure(progress_color=hexcode)
         except Exception:
             pass
         
@@ -894,10 +1017,34 @@ class AutoToneApp(Tk):
                     print(f"Lỗi vẽ waveform: {e}")
 
     def on_drop(self, event):
+        self._is_dragging_file = False
         file_path = event.data
         if file_path.startswith('{') and file_path.endswith('}'):
             file_path = file_path[1:-1]
         self.process_new_file(file_path)
+
+    def _animate_dropzone(self):
+        if getattr(self, '_is_dragging_file', False) and not getattr(self, 'selected_file', None):
+            import math
+            # Tính toán góc mở của miệng Pac-Man (từ 0 đến 45 độ)
+            # Dùng hàm sin để tạo chuyển động mở/đóng mượt mà
+            angle = abs(math.sin(self._drag_anim_step * 0.4)) * 45
+            
+            start_angle = angle
+            extent_angle = 360 - 2 * angle
+            
+            self.pacman_canvas.itemconfig(self.pacman_arc, start=start_angle, extent=extent_angle)
+            
+            dots = "." * ((self._drag_anim_step % 4) + 1)
+            
+            # Pulse colors
+            color_pulse = self.current_theme_color if self._drag_anim_step % 6 < 3 else "#ffcc00"
+            
+            self.lbl_filename.configure(text=f"Đang đói! Đưa file đây{dots}")
+            self.dropzone.configure(border_color=color_pulse)
+            
+            self._drag_anim_step += 1
+            self.after(50, self._animate_dropzone)
 
     def browse_file(self):
         filetypes = (
@@ -926,6 +1073,7 @@ class AutoToneApp(Tk):
             self.dropzone.grid_propagate(True)
         
         self.drop_icon.pack_forget()
+        self.pacman_canvas.pack_forget()
         self.lbl_hint.pack_forget()
         self.lbl_filename.configure(text=f"🎵  {filename}", font=ctk.CTkFont(size=13, weight="bold"), text_color="#eeeeee")
         self.lbl_filename.pack(pady=0) # Padding trong đã được xử lý bởi dropzone_inner
@@ -1112,6 +1260,13 @@ class AutoToneApp(Tk):
             self.toggle_playback()
             
         out_dir = self.default_output_dir if self.default_output_dir else os.path.dirname(self.selected_file)
+        
+        # Tự động tạo thư mục con theo tên bài hát
+        if self.auto_subfolder:
+            song_name = os.path.splitext(os.path.basename(self.selected_file))[0]
+            out_dir = os.path.join(out_dir, f"{song_name}_Stems")
+            os.makedirs(out_dir, exist_ok=True)
+        
         self.set_status("Đang tách Stem (Demucs)...", is_loading=True)
         # Disable nút khi đang tách
         self.btn_separate.configure(state="disabled", text="⏳  Đang tách...")
@@ -1121,6 +1276,8 @@ class AutoToneApp(Tk):
             out_dir,
             output_format=self.output_format,
             two_stems=self.two_stems_mode,
+            mp3_bitrate=self.mp3_bitrate,
+            use_gpu=self.use_gpu,
             progress_callback=lambda m: self.set_status(f"Tách nhạc: {m}", is_loading=True),
             done_callback=lambda d: self.after(0, self._separation_done, d),
             error_callback=lambda e: self.after(0, self._separation_error, e)
@@ -1247,50 +1404,81 @@ class AutoToneApp(Tk):
             
         mixer_win = ctk.CTkToplevel(self)
         mixer_win.title("Bộ trộn âm (Stem Mixer)")
-        mixer_win.geometry("450x450")
+        
+        # Tính chiều cao động theo số lượng stems
+        num_stems = len(self.last_separated_stems)
+        win_height = 200 + (num_stems * 70)
+        mixer_win.geometry(f"520x{win_height}")
         mixer_win.attributes("-topmost", True)
         mixer_win.focus()
         
         self.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 450) // 2
-        y = self.winfo_y() + (self.winfo_height() - 450) // 2
+        x = self.winfo_x() + (self.winfo_width() - 520) // 2
+        y = self.winfo_y() + (self.winfo_height() - win_height) // 2
         mixer_win.geometry(f"+{x}+{y}")
         
         header = ctk.CTkLabel(mixer_win, text="🎛️ Bộ trộn âm lượng", font=ctk.CTkFont(size=20, weight="bold"))
-        header.pack(pady=(20, 15))
+        header.pack(pady=(20, 5))
+        
+        hint = ctk.CTkLabel(mixer_win, text="Nhấn ▶ để nghe riêng từng stem  ·  Kéo thanh trượt để chỉnh âm lượng",
+                            font=ctk.CTkFont(size=11), text_color="#666666")
+        hint.pack(pady=(0, 15))
         
         self.mixer_vars = {}
+        self._stem_solo_playing = None  # Tên stem đang solo
+        self._stem_play_buttons = {}
+        
         for stem_name, path in self.last_separated_stems.items():
-            frame = ctk.CTkFrame(mixer_win, fg_color="transparent")
-            frame.pack(fill="x", padx=30, pady=10)
+            row_frame = ctk.CTkFrame(mixer_win, fg_color="#1e1e1e", corner_radius=10, height=56)
+            row_frame.pack(fill="x", padx=25, pady=4)
+            row_frame.pack_propagate(False)
             
-            lbl_name = ctk.CTkLabel(frame, text=stem_name.capitalize(), font=ctk.CTkFont(weight="bold"), width=80, anchor="w")
+            inner = ctk.CTkFrame(row_frame, fg_color="transparent")
+            inner.pack(fill="both", expand=True, padx=12, pady=8)
+            
+            # Nút Play riêng cho từng stem
+            def make_solo_callback(name=stem_name):
+                return lambda: self._toggle_stem_solo(name, mixer_win)
+            
+            btn_solo = ctk.CTkButton(inner, text="▶", width=34, height=34, corner_radius=17,
+                                     fg_color="#2a2a2a", hover_color="#3a3a3a",
+                                     border_width=1, border_color="#3a3a3a",
+                                     font=ctk.CTkFont(size=14),
+                                     command=make_solo_callback())
+            btn_solo.pack(side="left", padx=(0, 8))
+            self._stem_play_buttons[stem_name] = btn_solo
+            
+            # Tên stem
+            display_name = stem_name.capitalize()
+            lbl_name = ctk.CTkLabel(inner, text=display_name, font=ctk.CTkFont(size=13, weight="bold"), width=70, anchor="w")
             lbl_name.pack(side="left")
             
+            # Slider
             var = ctk.DoubleVar(value=1.0)
             self.mixer_vars[stem_name] = var
             
-            lbl_val = ctk.CTkLabel(frame, text="100%", width=45, anchor="e")
+            lbl_val = ctk.CTkLabel(inner, text="100%", width=45, anchor="e", font=ctk.CTkFont(size=12))
             
             def on_slider_change(val, l=lbl_val):
                 l.configure(text=f"{int(val*100)}%")
                 if getattr(self, 'is_preview_mixing', False):
                     self._debounce_preview_remix(mixer_win)
                 
-            slider = ctk.CTkSlider(frame, from_=0.0, to=1.5, variable=var, command=on_slider_change,
+            slider = ctk.CTkSlider(inner, from_=0.0, to=1.5, variable=var, command=on_slider_change,
                                    progress_color=self.current_theme_color, button_color=self.current_theme_color,
-                                   button_hover_color=self._darken_color(self.current_theme_color))
-            slider.pack(side="left", fill="x", expand=True, padx=10)
+                                   button_hover_color=self._darken_color(self.current_theme_color),
+                                   height=16)
+            slider.pack(side="left", fill="x", expand=True, padx=8)
             lbl_val.pack(side="right")
             
         self.mixer_progress = ctk.CTkProgressBar(mixer_win, height=4, progress_color=self.current_theme_color, fg_color="#2a2a2a")
-        self.mixer_progress.pack(fill="x", padx=30, pady=(15, 0))
+        self.mixer_progress.pack(fill="x", padx=25, pady=(15, 0))
         self.mixer_progress.set(0)
         
         action_frame = ctk.CTkFrame(mixer_win, fg_color="transparent")
         action_frame.pack(pady=(15, 20))
 
-        self.btn_preview_mix = ctk.CTkButton(action_frame, text="▶ Nghe thử", height=40, font=ctk.CTkFont(size=14, weight="bold"),
+        self.btn_preview_mix = ctk.CTkButton(action_frame, text="▶ Nghe Mix", height=40, font=ctk.CTkFont(size=14, weight="bold"),
                                 fg_color="#2a2a2a", hover_color="#3a3a3a", border_width=1, border_color="#3a3a3a",
                                 command=lambda: self._toggle_preview_mix(mixer_win))
         self.btn_preview_mix.pack(side="left", padx=10)
@@ -1303,11 +1491,47 @@ class AutoToneApp(Tk):
         self.is_preview_mixing = False
         
         def on_close():
+            if getattr(self, '_stem_solo_playing', None):
+                pygame.mixer.music.stop()
+                self._stem_solo_playing = None
             if getattr(self, 'is_preview_mixing', False):
                 pygame.mixer.music.stop()
                 self.is_preview_mixing = False
             mixer_win.destroy()
         mixer_win.protocol("WM_DELETE_WINDOW", on_close)
+
+    def _toggle_stem_solo(self, stem_name, win):
+        """Phát hoặc dừng một stem riêng lẻ."""
+        # Nếu đang phát mix → dừng mix trước
+        if getattr(self, 'is_preview_mixing', False):
+            pygame.mixer.music.stop()
+            self.is_preview_mixing = False
+            self.btn_preview_mix.configure(text="▶ Nghe Mix", text_color="#dddddd")
+            self.mixer_progress.set(0)
+        
+        if self._stem_solo_playing == stem_name:
+            # Đang phát stem này → dừng
+            pygame.mixer.music.stop()
+            self._stem_solo_playing = None
+            self._stem_play_buttons[stem_name].configure(text="▶", fg_color="#2a2a2a")
+            return
+        
+        # Dừng stem cũ nếu có
+        if self._stem_solo_playing and self._stem_solo_playing in self._stem_play_buttons:
+            self._stem_play_buttons[self._stem_solo_playing].configure(text="▶", fg_color="#2a2a2a")
+            pygame.mixer.music.stop()
+        
+        # Phát stem mới
+        try:
+            path = self.last_separated_stems[stem_name]
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.play()
+            self.preview_start_offset = 0.0
+            self._stem_solo_playing = stem_name
+            self._stem_play_buttons[stem_name].configure(text="⏸", fg_color=self.current_theme_color)
+            self.after(50, lambda: self._update_mixer_timeline(win))
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể phát stem:\n{e}")
 
     def _debounce_preview_remix(self, win):
         if hasattr(self, '_remix_timer'):
@@ -1345,7 +1569,10 @@ class AutoToneApp(Tk):
         threading.Thread(target=run_remix, daemon=True).start()
 
     def _update_mixer_timeline(self, win):
-        if not getattr(self, 'is_preview_mixing', False) or not win.winfo_exists():
+        is_mixing = getattr(self, 'is_preview_mixing', False)
+        is_soloing = getattr(self, '_stem_solo_playing', None) is not None
+        
+        if not (is_mixing or is_soloing) or not win.winfo_exists():
             return
             
         try:
@@ -1353,8 +1580,13 @@ class AutoToneApp(Tk):
             if pos_ms >= 0:
                 current_time = getattr(self, 'preview_start_offset', 0.0) + (pos_ms / 1000.0)
                 if self.audio_duration and current_time >= self.audio_duration:
-                    self.is_preview_mixing = False
-                    self.btn_preview_mix.configure(text="▶ Nghe thử", text_color="#dddddd")
+                    if is_mixing:
+                        self.is_preview_mixing = False
+                        self.btn_preview_mix.configure(text="▶ Nghe Mix", text_color="#dddddd")
+                    if is_soloing:
+                        if self._stem_solo_playing in self._stem_play_buttons:
+                            self._stem_play_buttons[self._stem_solo_playing].configure(text="▶", fg_color="#2a2a2a")
+                        self._stem_solo_playing = None
                     self.mixer_progress.set(0)
                     pygame.mixer.music.stop()
                     return
@@ -1368,11 +1600,17 @@ class AutoToneApp(Tk):
         self.after(50, lambda: self._update_mixer_timeline(win))
 
     def _toggle_preview_mix(self, win):
+        if getattr(self, '_stem_solo_playing', None):
+            pygame.mixer.music.stop()
+            if self._stem_solo_playing in self._stem_play_buttons:
+                self._stem_play_buttons[self._stem_solo_playing].configure(text="▶", fg_color="#2a2a2a")
+            self._stem_solo_playing = None
+            
         if getattr(self, 'is_preview_mixing', False):
             # Stop playing
             pygame.mixer.music.stop()
             self.is_preview_mixing = False
-            self.btn_preview_mix.configure(text="▶ Nghe thử", text_color="#dddddd")
+            self.btn_preview_mix.configure(text="▶ Nghe Mix", text_color="#dddddd")
             self.mixer_progress.set(0)
             return
             

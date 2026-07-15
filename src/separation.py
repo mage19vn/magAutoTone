@@ -8,7 +8,7 @@ class StemSeparator:
         self.process = None
         self.is_running = False
 
-    def separate(self, file_path: str, output_dir: str, output_format: str = "wav", two_stems: bool = False, progress_callback=None, done_callback=None, error_callback=None):
+    def separate(self, file_path: str, output_dir: str, output_format: str = "wav", two_stems: bool = False, mp3_bitrate: int = 320, use_gpu: bool = False, progress_callback=None, done_callback=None, error_callback=None):
         """
         Chạy Demucs trên một luồng riêng bằng subprocess để tách stem.
         """
@@ -33,11 +33,16 @@ class StemSeparator:
                     "-o", output_dir,
                 ]
                 
+                # GPU Acceleration
+                if use_gpu:
+                    cmd.extend(["--device", "cuda"])
+                
                 if two_stems:
                     cmd.extend(["--two-stems", "vocals"])
                 
                 if output_format.lower() == "mp3":
                     cmd.append("--mp3")
+                    cmd.extend(["--mp3-bitrate", str(mp3_bitrate)])
                 elif output_format.lower() == "flac":
                     cmd.append("--flac")
                     
